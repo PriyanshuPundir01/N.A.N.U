@@ -1,4 +1,4 @@
-﻿import "dotenv/config";
+import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import morgan from "morgan";
@@ -617,9 +617,20 @@ app.post("/api/chat", verify, async (req, res) => {
 
   const lastUserMsg = cleanMessages.filter(m => m.role === "user").pop()?.content || "";
 
-  // 1. Dedicated Local
+  // 1. NANU Smart — routes through Gemini Flash Lite for full AI capability
+  //    Falls back to built-in local engine only if API is unavailable
   if (model === "nanu-smart") {
-    console.log("[NANU Smart] Handling locally. prompt: " + lastUserMsg.slice(0, 80));
+    if (config.geminiKey) {
+      try {
+        console.log("[NANU Smart] Routing via Gemini Flash Lite. prompt: " + lastUserMsg.slice(0, 80));
+        await callGemini(finalMessages, "gemini-flash-lite-latest", apiKey, res);
+        res.end();
+        return;
+      } catch (err) {
+        console.warn("[NANU Smart] Gemini unavailable, using built-in engine:", err.message);
+      }
+    }
+    // Fallback to local engine when offline or no API key
     await streamFallback(lastUserMsg, res);
     res.end();
     return;
