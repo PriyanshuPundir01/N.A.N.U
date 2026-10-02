@@ -1,4 +1,4 @@
-const userToken = localStorage.getItem("nanu_token");
+﻿const userToken = localStorage.getItem("nanu_token");
 if (!userToken) {
   window.location.href = "/auth.html";
 }
@@ -1089,7 +1089,7 @@ if (composerMicBtn) {
 // -------------------------------------------------------------
 const MODEL_DISPLAY_INFO = {
   "gemini-flash-lite-latest": { name: "Flash Lite", fullName: "Gemini Flash Lite", icon: "⚡" },
-  "gemini-2.5-flash": { name: "Flash 2.5", fullName: "Gemini 2.5 Flash", icon: "🧠" },
+  "gemini-2.0-flash-thinking-exp-01-21": { name: "Flash 2.5", fullName: "Gemini 2.5 Flash", icon: "🧠" },
   "nanu-smart": { name: "NANU Smart", fullName: "NANU Smart (Offline)", icon: "💻" }
 };
 
