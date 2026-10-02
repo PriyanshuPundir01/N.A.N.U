@@ -799,7 +799,7 @@ function regenerateLast() {
 
 function autoGrow() {
   inputBox.style.height = "auto";
-  const newHeight = Math.max(24, Math.min(inputBox.scrollHeight, 200));
+  const newHeight = Math.max(36, Math.min(inputBox.scrollHeight, 220));
   inputBox.style.height = newHeight + "px";
 }
 
