@@ -1088,11 +1088,8 @@ if (composerMicBtn) {
 // Search Bar Model Switcher & Selection
 // -------------------------------------------------------------
 const MODEL_DISPLAY_INFO = {
-  "gemini-flash-lite-latest": { name: "Flash", fullName: "Gemini Flash Lite", icon: "⚡" },
-  "gemini-3.8-flash": { name: "Flash 3.8", fullName: "Gemini 3.8 Flash", icon: "✨" },
-  "gemini-3.1-flash-lite-preview": { name: "Flash 3.1", fullName: "Gemini 3.1 Flash", icon: "🚀" },
-  "gemini-flash-latest": { name: "Flash", fullName: "Gemini Flash", icon: "🌟" },
-  "qwen/qwen3.8-27b:free": { name: "Qwen 2.5", fullName: "Qwen 2.5 27B", icon: "🌐" },
+  "gemini-flash-lite-latest": { name: "Flash Lite", fullName: "Gemini Flash Lite", icon: "⚡" },
+  "gemini-2.5-flash": { name: "Flash 2.5", fullName: "Gemini 2.5 Flash", icon: "🧠" },
   "nanu-smart": { name: "NANU Smart", fullName: "NANU Smart (Offline)", icon: "💻" }
 };
 

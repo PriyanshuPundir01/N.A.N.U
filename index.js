@@ -162,12 +162,9 @@ app.post("/api/settings", verify, (req, res) => {
 app.get("/api/models", verify, (_req, res) => {
   res.json({
     models: [
-      { id: "gemini-flash-lite-latest", name: "Gemini Flash Lite (Google — Fast, Multimodal & 100% Free)", provider: "gemini", isFree: true, recommended: true },
-      { id: "gemini-3.8-flash", name: "Gemini 3.8 Flash (Google — Latest State of the Art & 100% Free)", provider: "gemini", isFree: true },
-      { id: "gemini-3.1-flash-lite-preview", name: "Gemini 3.1 Flash Lite (Google — Ultra Fast & 100% Free)", provider: "gemini", isFree: true },
-      { id: "gemini-flash-latest", name: "Gemini Flash Latest (Google AI Free Tier)", provider: "gemini", isFree: true },
-      { id: "qwen/qwen3.8-27b:free", name: "Qwen 2.5 27B (OpenRouter — 100% Free, No Credits)", provider: "openrouter", isFree: true },
-      { id: "nanu-smart", name: "NANU Smart Assistant (Local — Offline & 100% Free)", provider: "local", isFree: true }
+      { id: "gemini-flash-lite-latest", name: "Gemini Flash Lite — Fastest & 100% Free", provider: "gemini", isFree: true, recommended: true },
+      { id: "gemini-2.5-flash", name: "Gemini 2.5 Flash — Reasoning & 100% Free", provider: "gemini", isFree: true },
+      { id: "nanu-smart", name: "NANU Smart — Offline Local Engine", provider: "local", isFree: true }
     ]
   });
 });
@@ -343,20 +340,26 @@ async function callGemini(messages, model, customKey, res) {
     requestBody.systemInstruction = { parts: [{ text: sysMsg.content }] };
   }
 
-  // Cascading free models: prioritize selected model, then ultra-fast free fallback models
+  // For Gemini 2.5 Flash: enable thinking mode for spectacular reasoning
+  const isThinkingModel = model === "gemini-2.5-flash";
+  if (isThinkingModel) {
+    requestBody.generationConfig = {
+      ...requestBody.generationConfig,
+      thinkingConfig: { thinkingBudget: 8192 }
+    };
+  }
+
+  // Cascading: try selected model first, then stable fallback
   const rawCandidateModels = [
     model && model.startsWith("gemini") ? model : "gemini-flash-lite-latest",
-    "gemini-flash-lite-latest",
-    "gemini-3.1-flash-lite-preview",
-    "gemini-3.5-flash-lite",
-    "gemini-3.7-flash"
+    "gemini-flash-lite-latest"
   ];
   const candidateModels = [...new Set(rawCandidateModels)];
 
   for (const mName of candidateModels) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 12000);
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
 
       const response = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/${mName}:streamGenerateContent?alt=sse&key=${apiKey}`,
@@ -370,7 +373,8 @@ async function callGemini(messages, model, customKey, res) {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        console.warn(`Gemini candidate ${mName} status: ${response.status}`);
+        const errTxt = await response.text().catch(() => "");
+        console.warn(`Gemini candidate ${mName} status: ${response.status}`, errTxt.slice(0, 200));
         continue;
       }
 
