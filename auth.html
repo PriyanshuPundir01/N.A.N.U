@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>NANU — Authentication</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link href="style.css" rel="stylesheet" />
+  <style>
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: radial-gradient(circle at top left, #1a1e2d, #06080e);
+      margin: 0;
+      font-family: 'Inter', sans-serif;
+    }
+    .auth-container {
+      background: rgba(15, 20, 34, 0.6);
+      border: 1px solid var(--border-2);
+      border-radius: 24px;
+      padding: 40px;
+      width: 100%;
+      max-width: 400px;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+      backdrop-filter: blur(20px);
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .auth-header {
+      margin-bottom: 30px;
+    }
+    .auth-header .brand {
+      justify-content: center;
+      margin-bottom: 15px;
+    }
+    .auth-header h2 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 600;
+      color: #fff;
+    }
+    .auth-header p {
+      margin: 8px 0 0;
+      font-size: 14px;
+      color: #8b9bb4;
+    }
+    .auth-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      text-align: left;
+    }
+    .auth-form label {
+      font-size: 12px;
+      font-weight: 500;
+      color: #8b9bb4;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .auth-form input {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 12px 16px;
+      color: #fff;
+      font-size: 15px;
+      outline: none;
+      transition: border 0.2s, background 0.2s;
+    }
+    .auth-form input:focus {
+      border-color: var(--primary);
+      background: rgba(0, 0, 0, 0.4);
+    }
+    .auth-btn {
+      background: var(--primary);
+      color: #000;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.2s, opacity 0.2s, box-shadow 0.2s;
+      margin-top: 10px;
+      box-shadow: 0 4px 20px rgba(123, 214, 255, 0.3);
+    }
+    .auth-btn:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 24px rgba(123, 214, 255, 0.4);
+    }
+    .auth-btn:active {
+      transform: translateY(1px);
+    }
+    .auth-links {
+      margin-top: 24px;
+      font-size: 13px;
+      color: #8b9bb4;
+    }
+    .auth-links a {
+      color: var(--primary);
+      text-decoration: none;
+      font-weight: 500;
+      cursor: pointer;
+      transition: color 0.2s;
+    }
+    .auth-links a:hover {
+      color: #fff;
+      text-decoration: underline;
+    }
+    .view {
+      display: none;
+      animation: fadeIn 0.3s ease forwards;
+    }
+    .view.active {
+      display: block;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .error-msg {
+      color: #ff6b6b;
+      font-size: 13px;
+      margin-bottom: 10px;
+      text-align: center;
+      min-height: 18px;
+    }
+    .success-msg {
+      color: #51cf66;
+      font-size: 13px;
+      margin-bottom: 10px;
+      text-align: center;
+      min-height: 18px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="auth-container">
+  <!-- LOGIN VIEW -->
+  <div id="view-login" class="view active">
+    <div class="auth-header">
+      <div class="brand">
+        <div class="orb-wrap"><div class="orb"></div></div>
+        <span class="brand-name">NANU</span>
+      </div>
+      <h2>Welcome Back</h2>
+      <p>Log in to access your AI assistant</p>
+    </div>
+    <div class="error-msg" id="login-error"></div>
+    <form class="auth-form" id="loginForm">
+      <div>
+        <label>Email</label>
+        <input type="email" id="login-email" placeholder="you@example.com" required style="width: 100%; box-sizing: border-box; margin-top: 6px;" />
+      </div>
+      <div>
+        <label>Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" required style="width: 100%; box-sizing: border-box; margin-top: 6px;" />
+      </div>
+      <button type="submit" class="auth-btn" id="login-btn">Log In</button>
+    </form>
+    <div class="auth-links">
+      <a onclick="switchView('forgot')">Forgot Password?</a><br><br>
+      Don't have an account? <a onclick="switchView('register')">Sign up</a>
+    </div>
+  </div>
+
+  <!-- REGISTER VIEW -->
+  <div id="view-register" class="view">
+    <div class="auth-header">
+      <div class="brand">
+        <div class="orb-wrap"><div class="orb"></div></div>
+        <span class="brand-name">NANU</span>
+      </div>
+      <h2>Create Account</h2>
+      <p>Join NANU today</p>
+    </div>
+    <div class="error-msg" id="reg-error"></div>
+    <form class="auth-form" id="registerForm">
+      <div>
+        <label>Email</label>
+        <input type="email" id="reg-email" placeholder="you@example.com" required style="width: 100%; box-sizing: border-box; margin-top: 6px;" />
+      </div>
+      <div>
+        <label>Password</label>
+        <input type="password" id="reg-password" placeholder="••••••••" required minlength="6" style="width: 100%; box-sizing: border-box; margin-top: 6px;" />
+      </div>
+      <button type="submit" class="auth-btn" id="reg-btn">Sign Up</button>
+    </form>
+    <div class="auth-links">
+      Already have an account? <a onclick="switchView('login')">Log in</a>
+    </div>
+  </div>
+
+  <!-- FORGOT PASSWORD VIEW -->
+  <div id="view-forgot" class="view">
+    <div class="auth-header">
+      <div class="brand">
+        <div class="orb-wrap"><div class="orb"></div></div>
+        <span class="brand-name">NANU</span>
+      </div>
+      <h2>Reset Password</h2>
+      <p>Enter your email to receive an OTP</p>
+    </div>
+    <div class="error-msg" id="forgot-error"></div>
+    <div class="success-msg" id="forgot-success"></div>
+    
+    <!-- Step 1: Request OTP -->
+    <form class="auth-form" id="forgotForm">
+      <div>
+        <label>Email</label>
+        <input type="email" id="forgot-email" placeholder="you@example.com" required style="width: 100%; box-sizing: border-box; margin-top: 6px;" />
+      </div>
+      <button type="submit" class="auth-btn" id="forgot-btn">Send OTP</button>
+    </form>
+
+    <!-- Step 2: Verify OTP -->
+    <form class="auth-form" id="verifyForm" style="display: none; margin-top: 20px;">
+      <div>
+        <label>6-Digit OTP</label>
+        <input type="text" id="verify-otp" placeholder="123456" required style="width: 100%; box-sizing: border-box; margin-top: 6px; letter-spacing: 4px; text-align: center; font-size: 18px;" maxlength="6" />
+      </div>
+      <div>
+        <label>New Password</label>
+        <input type="password" id="verify-new-password" placeholder="••••••••" required minlength="6" style="width: 100%; box-sizing: border-box; margin-top: 6px;" />
+      </div>
+      <button type="submit" class="auth-btn" id="verify-btn">Reset & Log In</button>
+    </form>
+
+    <div class="auth-links">
+      Remembered it? <a onclick="switchView('login')">Log in</a>
+    </div>
+  </div>
+</div>
+
+<script src="auth.js"></script>
+</body>
+</html>
