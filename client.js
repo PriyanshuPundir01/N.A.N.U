@@ -675,7 +675,16 @@ function renderAttachmentPreviews() {
 function updateSendButtonState() {
   const hasText = inputBox.value.trim().length > 0;
   const hasFiles = attachedFiles.length > 0;
-  sendBtn.disabled = (!hasText && !hasFiles) || streaming;
+  const canSend = hasText || hasFiles;
+
+  if (canSend) {
+    sendBtn.style.display = "flex";
+    sendBtn.disabled = streaming;
+    if (composerMicBtn) composerMicBtn.style.display = "none";
+  } else {
+    sendBtn.style.display = "none";
+    if (composerMicBtn) composerMicBtn.style.display = "flex";
+  }
 }
 
 async function sendMessage(overrideContent) {
@@ -799,8 +808,17 @@ function regenerateLast() {
 
 function autoGrow() {
   inputBox.style.height = "auto";
-  const newHeight = Math.max(36, Math.min(inputBox.scrollHeight, 220));
+  const newHeight = Math.max(24, Math.min(inputBox.scrollHeight, 140));
   inputBox.style.height = newHeight + "px";
+  if (composerInner) {
+    if (newHeight > 34) {
+      composerInner.style.borderRadius = "24px";
+      composerInner.style.height = "auto";
+    } else {
+      composerInner.style.borderRadius = "9999px";
+      composerInner.style.height = "54px";
+    }
+  }
 }
 
 let sidebarOpen = true;
@@ -979,7 +997,20 @@ if (scrollToBottomBtn) {
   });
 }
 
-// Think button (toggles reasoning / step by step)
+// Think toggle (inside Model Menu)
+const composerThinkToggle = $("composerThinkToggle");
+const modelTogglePill = $("modelTogglePill");
+if (composerThinkToggle) {
+  composerThinkToggle.addEventListener("click", (e) => {
+    e.stopPropagation();
+    isThinkingEnabled = !isThinkingEnabled;
+    composerThinkToggle.classList.toggle("active", isThinkingEnabled);
+    if (modelTogglePill) {
+      modelTogglePill.textContent = isThinkingEnabled ? "On" : "Off";
+    }
+    showToast(isThinkingEnabled ? "Deep Thinking mode enabled 💡" : "Standard mode active");
+  });
+}
 if (composerThinkBtn) {
   composerThinkBtn.addEventListener("click", () => {
     isThinkingEnabled = !isThinkingEnabled;
@@ -1057,12 +1088,12 @@ if (composerMicBtn) {
 // Search Bar Model Switcher & Selection
 // -------------------------------------------------------------
 const MODEL_DISPLAY_INFO = {
-  "gemini-flash-lite-latest": { name: "Gemini Flash Lite", icon: "⚡" },
-  "gemini-3.8-flash": { name: "Gemini 3.8 Flash", icon: "🧠" },
-  "gemini-3.1-flash-lite-preview": { name: "Gemini 3.1 Flash", icon: "⚡" },
-  "gemini-flash-latest": { name: "Gemini Flash", icon: "✨" },
-  "qwen/qwen3.8-27b:free": { name: "Qwen 2.5 27B", icon: "🌐" },
-  "nanu-smart": { name: "NANU Smart (Local)", icon: "💻" }
+  "gemini-flash-lite-latest": { name: "Flash", fullName: "Gemini Flash Lite", icon: "⚡" },
+  "gemini-3.8-flash": { name: "Flash 3.8", fullName: "Gemini 3.8 Flash", icon: "✨" },
+  "gemini-3.1-flash-lite-preview": { name: "Flash 3.1", fullName: "Gemini 3.1 Flash", icon: "🚀" },
+  "gemini-flash-latest": { name: "Flash", fullName: "Gemini Flash", icon: "🌟" },
+  "qwen/qwen3.8-27b:free": { name: "Qwen 2.5", fullName: "Qwen 2.5 27B", icon: "🌐" },
+  "nanu-smart": { name: "NANU Smart", fullName: "NANU Smart (Offline)", icon: "💻" }
 };
 
 function getActiveModel() {
@@ -1071,9 +1102,9 @@ function getActiveModel() {
 
 function setActiveModel(modelId, icon, name, showFeedback = true) {
   if (!modelId) return;
-  const info = MODEL_DISPLAY_INFO[modelId] || { name: name || modelId, icon: icon || "⚡" };
+  const info = MODEL_DISPLAY_INFO[modelId] || { name: name || modelId, fullName: name || modelId, icon: icon || "⚡" };
   const targetIcon = icon || info.icon;
-  const targetName = name || info.name;
+  const targetName = info.name;
 
   if (modelPillIcon) modelPillIcon.textContent = targetIcon;
   if (modelPillName) modelPillName.textContent = targetName;
@@ -1085,7 +1116,7 @@ function setActiveModel(modelId, icon, name, showFeedback = true) {
   });
 
   if (showFeedback) {
-    showToast(`Switched model to ${targetName} ${targetIcon}`);
+    showToast(`Switched model to ${info.fullName || targetName} ${targetIcon}`);
   }
 }
 
@@ -1308,7 +1339,7 @@ document.addEventListener("keydown", e => {
 
   // Initialize Active Model in Search Bar & Settings
   const savedModel = localStorage.getItem("nanu_model") || "gemini-flash-lite-latest";
-  const initialInfo = MODEL_DISPLAY_INFO[savedModel] || { name: "Gemini Flash Lite", icon: "⚡" };
+  const initialInfo = MODEL_DISPLAY_INFO[savedModel] || { name: "Flash", icon: "⚡" };
   setActiveModel(savedModel, initialInfo.icon, initialInfo.name, false);
 
   // Load server configured default free model if none set

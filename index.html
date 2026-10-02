@@ -158,100 +158,102 @@
         <!-- Attachment Previews above the input bar -->
         <div class="attachment-preview-bar" id="attachmentPreviewBar" hidden></div>
         <div class="composer-inner" id="composerInner">
-          <!-- Text Input Row (Gemini Style) -->
-          <div class="composer-input-row">
-            <textarea
-              id="inputBox"
-              placeholder="Ask N.A.N.U"
-              rows="1"
-              maxlength="8000"
-              aria-label="Ask N.A.N.U"
-            ></textarea>
-          </div>
+          <!-- + Add / Attach Button on Left -->
+          <button class="composer-add-btn" id="composerAddBtn" title="Attach file" type="button" aria-label="Attach file">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
 
-          <!-- Bottom Control Bar (Gemini Style) -->
-          <div class="composer-bottom-bar">
-            <div class="composer-bottom-left">
-              <button class="composer-add-btn" id="composerAddBtn" title="Attach file" type="button">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          <!-- Input Textarea with 'Ask N.A.N.U' Placeholder -->
+          <textarea
+            id="inputBox"
+            placeholder="Ask N.A.N.U"
+            rows="1"
+            maxlength="8000"
+            aria-label="Ask N.A.N.U"
+          ></textarea>
+
+          <!-- Right side items: Model Pill (Flash ⌄), Mic, Send -->
+          <div class="composer-actions" id="composerActions">
+            <span class="char-count" id="charCount"></span>
+
+            <!-- Model Switcher (like 'Flash ⌄' in user screenshot) -->
+            <div class="composer-model-picker" id="composerModelPicker">
+              <button type="button" class="composer-model-pill" id="composerModelPill" title="Switch AI model" aria-haspopup="true">
+                <span class="model-pill-name" id="modelPillName">Flash</span>
+                <svg class="model-pill-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
               </button>
-
-              <!-- Easy Model Switcher in Search Bar -->
-              <div class="composer-model-picker" id="composerModelPicker">
-                <button type="button" class="composer-model-pill" id="composerModelPill" title="Switch AI model" aria-haspopup="true">
-                  <span class="model-pill-icon" id="modelPillIcon">⚡</span>
-                  <span class="model-pill-name" id="modelPillName">Gemini Flash Lite</span>
-                  <svg class="model-pill-arrow" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+              <div class="composer-model-menu" id="composerModelMenu" hidden>
+                <div class="model-menu-title">Free AI Models (0 Credits)</div>
+                <button type="button" class="model-menu-item active" data-model="gemini-flash-lite-latest" data-icon="⚡" data-name="Flash">
+                  <span class="m-icon">⚡</span>
+                  <div class="m-info">
+                    <div class="m-name">Gemini Flash Lite <span class="m-tag">Fast & Free</span></div>
+                    <div class="m-desc">Google AI • 0 credits required</div>
+                  </div>
+                  <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
                 </button>
-                <div class="composer-model-menu" id="composerModelMenu" hidden>
-                  <div class="model-menu-title">Switch Free AI Model</div>
-                  <button type="button" class="model-menu-item active" data-model="gemini-flash-lite-latest" data-icon="⚡" data-name="Gemini Flash Lite">
-                    <span class="m-icon">⚡</span>
-                    <div class="m-info">
-                      <div class="m-name">Gemini Flash Lite <span class="m-tag">Fast & Free</span></div>
-                      <div class="m-desc">Google AI • 0 credits required</div>
-                    </div>
-                    <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                  </button>
-                  <button type="button" class="model-menu-item" data-model="gemini-3.8-flash" data-icon="✨" data-name="Gemini 3.8 Flash">
-                    <span class="m-icon">✨</span>
-                    <div class="m-info">
-                      <div class="m-name">Gemini 3.8 Flash <span class="m-tag">Smart & Free</span></div>
-                      <div class="m-desc">Google AI • Latest model</div>
-                    </div>
-                    <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                  </button>
-                  <button type="button" class="model-menu-item" data-model="gemini-3.1-flash-lite-preview" data-icon="🚀" data-name="Gemini 3.1 Flash">
-                    <span class="m-icon">🚀</span>
-                    <div class="m-info">
-                      <div class="m-name">Gemini 3.1 Flash <span class="m-tag">High Speed</span></div>
-                      <div class="m-desc">Google AI • Ultra fast responses</div>
-                    </div>
-                    <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                  </button>
-                  <button type="button" class="model-menu-item" data-model="gemini-flash-latest" data-icon="🌟" data-name="Gemini Flash">
-                    <span class="m-icon">🌟</span>
-                    <div class="m-info">
-                      <div class="m-name">Gemini Flash <span class="m-tag">Stable Free</span></div>
-                      <div class="m-desc">Google AI • Core free model</div>
-                    </div>
-                    <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                  </button>
-                  <button type="button" class="model-menu-item" data-model="qwen/qwen3.8-27b:free" data-icon="🌐" data-name="Qwen 2.5 27B">
-                    <span class="m-icon">🌐</span>
-                    <div class="m-info">
-                      <div class="m-name">Qwen 2.5 27B <span class="m-tag">OpenRouter</span></div>
-                      <div class="m-desc">Open Source • Free tier</div>
-                    </div>
-                    <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                  </button>
-                  <button type="button" class="model-menu-item" data-model="nanu-smart" data-icon="💻" data-name="NANU Smart">
-                    <span class="m-icon">💻</span>
-                    <div class="m-info">
-                      <div class="m-name">NANU Smart <span class="m-tag">Offline</span></div>
-                      <div class="m-desc">Local built-in • 0 keys needed</div>
-                    </div>
-                    <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
-                  </button>
+                <button type="button" class="model-menu-item" data-model="gemini-3.8-flash" data-icon="✨" data-name="Flash 3.8">
+                  <span class="m-icon">✨</span>
+                  <div class="m-info">
+                    <div class="m-name">Gemini 3.8 Flash <span class="m-tag">Smart & Free</span></div>
+                    <div class="m-desc">Google AI • Latest state of the art</div>
+                  </div>
+                  <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <button type="button" class="model-menu-item" data-model="gemini-3.1-flash-lite-preview" data-icon="🚀" data-name="Flash 3.1">
+                  <span class="m-icon">🚀</span>
+                  <div class="m-info">
+                    <div class="m-name">Gemini 3.1 Flash <span class="m-tag">High Speed</span></div>
+                    <div class="m-desc">Google AI • Ultra fast responses</div>
+                  </div>
+                  <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <button type="button" class="model-menu-item" data-model="gemini-flash-latest" data-icon="🌟" data-name="Flash">
+                  <span class="m-icon">🌟</span>
+                  <div class="m-info">
+                    <div class="m-name">Gemini Flash <span class="m-tag">Stable Free</span></div>
+                    <div class="m-desc">Google AI • Core free model</div>
+                  </div>
+                  <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <button type="button" class="model-menu-item" data-model="qwen/qwen3.8-27b:free" data-icon="🌐" data-name="Qwen 2.5">
+                  <span class="m-icon">🌐</span>
+                  <div class="m-info">
+                    <div class="m-name">Qwen 2.5 27B <span class="m-tag">OpenRouter</span></div>
+                    <div class="m-desc">Open Source • Free tier</div>
+                  </div>
+                  <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+                <button type="button" class="model-menu-item" data-model="nanu-smart" data-icon="💻" data-name="NANU Smart">
+                  <span class="m-icon">💻</span>
+                  <div class="m-info">
+                    <div class="m-name">NANU Smart <span class="m-tag">Offline</span></div>
+                    <div class="m-desc">Local built-in • 0 keys needed</div>
+                  </div>
+                  <svg class="m-check" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </button>
+
+                <!-- Deep Thinking Toggle Row -->
+                <div class="model-menu-divider"></div>
+                <div class="model-menu-toggle-row" id="composerThinkToggle" role="button" tabindex="0">
+                  <div class="m-info">
+                    <div class="m-name">💡 Deep Thinking Mode</div>
+                    <div class="m-desc">Step-by-step reasoning on responses</div>
+                  </div>
+                  <div class="model-toggle-pill" id="modelTogglePill">Off</div>
                 </div>
               </div>
             </div>
 
-            <div class="composer-actions" id="composerActions">
-              <span class="char-count" id="charCount"></span>
-              <button class="composer-think-btn" id="composerThinkBtn" title="Toggle reasoning / think step-by-step" type="button">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 0-7 7c0 2.38 1.19 4.47 3 5.74V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.26c1.81-1.27 3-3.36 3-5.74a7 7 0 0 0-7-7z"/><line x1="9" y1="21" x2="15" y2="21"/></svg>
-                <span>Think</span>
-              </button>
-              <!-- Microphone: Voice Dictation (Speech to text into input) -->
-              <button class="composer-mic-btn" id="composerMicBtn" title="Voice dictation (Speech to text)" aria-label="Voice dictation" type="button">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
-              </button>
-              <!-- Dedicated Send button -->
-              <button class="composer-send-btn" id="sendBtn" title="Send message (Enter)" aria-label="Send message" type="button">
-                <svg class="send-icon-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-              </button>
-            </div>
+            <!-- Microphone: Voice Dictation -->
+            <button class="composer-mic-btn" id="composerMicBtn" title="Voice dictation (Speech to text)" aria-label="Voice dictation" type="button">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/></svg>
+            </button>
+
+            <!-- Dedicated Send button (visible when user types) -->
+            <button class="composer-send-btn" id="sendBtn" title="Send message (Enter)" aria-label="Send message" type="button" style="display: none;">
+              <svg class="send-icon-arrow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+            </button>
           </div>
         </div>
         <div class="composer-disclaimer">NANU can make mistakes. Check important info.</div>
