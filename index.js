@@ -348,43 +348,89 @@ async function callGemini(messages, model, customKey, res) {
     model && model.startsWith("gemini") ? model : "gemini-flash-lite-latest",
     "gemini-flash-lite-latest",
     "gemini-3.1-flash-lite-preview",
-    "gemini-3.8-flash",
-    "gemini-flash-latest"
+    "gemini-3.5-flash-lite",
+    "gemini-3.7-flash"
   ];
   const candidateModels = [...new Set(rawCandidateModels)];
-  let response = null;
-  let lastErr = null;
 
   for (const mName of candidateModels) {
     try {
-      response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${mName}:generateContent?key=${apiKey}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(requestBody)
-      });
-      if (response.ok) break;
-      lastErr = await response.text().catch(() => "");
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${mName}:streamGenerateContent?alt=sse&key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal
+        }
+      );
+      clearTimeout(timeoutId);
+
+      if (!response.ok) {
+        console.warn(`Gemini candidate ${mName} status: ${response.status}`);
+        continue;
+      }
+
+      const decoder = new TextDecoder();
+      let streamHasText = false;
+
+      for await (const chunk of response.body) {
+        const str = decoder.decode(chunk, { stream: true });
+        for (const line of str.split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          const dataStr = line.slice(5).trim();
+          if (!dataStr) continue;
+          try {
+            const json = JSON.parse(dataStr);
+            const parts = json.candidates?.[0]?.content?.parts || [];
+            for (const p of parts) {
+              if (p.text) {
+                res.write(p.text);
+                streamHasText = true;
+              }
+            }
+          } catch (e) {}
+        }
+      }
+
+      if (streamHasText) {
+        return true;
+      }
     } catch (e) {
-      lastErr = e.message;
+      console.warn(`Gemini candidate ${mName} stream error:`, e.message);
     }
   }
 
-  if (!response || !response.ok) {
-    throw { status: response?.status || 500, body: lastErr || "Gemini API error" };
+  // Backup fallback: non-streaming generateContent on fastest verified model
+  for (const fallbackModel of ["gemini-flash-lite-latest", "gemini-3.1-flash-lite-preview"]) {
+    try {
+      const fbRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${fallbackModel}:generateContent?key=${apiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody)
+        }
+      );
+      if (fbRes.ok) {
+        const data = await fbRes.json();
+        const parts = data.candidates?.[0]?.content?.parts || [];
+        let text = "";
+        for (const p of parts) {
+          if (p.text) text += p.text;
+        }
+        if (text) {
+          res.write(text);
+          return true;
+        }
+      }
+    } catch (e) {}
   }
 
-  const data = await response.json();
-  const reply = data.candidates?.[0]?.content?.parts?.[0]?.text || "";
-  if (!reply) throw new Error("Empty response from Gemini");
-
-  const words = reply.split(" ");
-  for (let i = 0; i < words.length; i++) {
-    res.write(words[i] + (i < words.length - 1 ? " " : ""));
-    if (i % 6 === 0) {
-      await new Promise(r => setTimeout(r, 18));
-    }
-  }
-  return true;
+  throw new Error("Empty response from Gemini");
 }
 
 // Call OpenRouter
