@@ -1088,8 +1088,8 @@ if (composerMicBtn) {
 // Search Bar Model Switcher & Selection
 // -------------------------------------------------------------
 const MODEL_DISPLAY_INFO = {
-  "gemini-flash-lite-latest": { name: "Flash Lite", fullName: "Gemini Flash Lite", icon: "⚡" },
-  "gemini-2.0-flash-thinking-exp-01-21": { name: "Flash 2.5", fullName: "Gemini 2.5 Flash", icon: "🧠" },
+  "gemini-flash-lite-latest": { name: "NANU Flash", fullName: "NANU Flash", icon: "⚡" },
+  "gemini-2.0-flash": { name: "NANU Pro", fullName: "NANU Pro (Reasoning)", icon: "🧠" },
   "nanu-smart": { name: "NANU Smart", fullName: "NANU Smart (Offline)", icon: "💻" }
 };
 
@@ -1354,3 +1354,5 @@ document.addEventListener("keydown", e => {
     })
     .catch(() => {});
 })();
+
+

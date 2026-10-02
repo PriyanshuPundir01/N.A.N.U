@@ -162,9 +162,9 @@ app.post("/api/settings", verify, (req, res) => {
 app.get("/api/models", verify, (_req, res) => {
   res.json({
     models: [
-      { id: "gemini-flash-lite-latest", name: "Gemini Flash Lite — Fastest & 100% Free", provider: "gemini", isFree: true, recommended: true },
-      { id: "gemini-2.0-flash-thinking-exp-01-21", name: "Gemini 2.5 Flash — Reasoning & 100% Free", provider: "gemini", isFree: true },
-      { id: "nanu-smart", name: "NANU Smart — Offline Local Engine", provider: "local", isFree: true }
+      { id: "gemini-flash-lite-latest", name: "NANU Flash — Fastest & Free", provider: "gemini", isFree: true, recommended: true },
+      { id: "gemini-2.0-flash", name: "NANU Pro — Deep Reasoning & Free", provider: "gemini", isFree: true },
+      { id: "nanu-smart", name: "NANU Smart — Offline Engine", provider: "local", isFree: true }
     ]
   });
 });
@@ -341,7 +341,7 @@ async function callGemini(messages, model, customKey, res) {
   }
 
   // For Gemini 2.5 Flash: enable thinking mode for spectacular reasoning
-  const isThinkingModel = model === "gemini-2.0-flash-thinking-exp-01-21";
+  const isThinkingModel = model === "gemini-2.0-flash";
   if (isThinkingModel) {
     requestBody.generationConfig = {
       ...requestBody.generationConfig,
@@ -562,12 +562,12 @@ async function streamFallback(prompt, res, notice = "") {
 
     // What can you do
     if (lower.includes("what can you do") || lower.includes("help me") || lower.includes("how do you work") || lower.includes("capabilities")) {
-      return `## What NANU Can Do 🧠\n\n### 💻 Offline Mode (NANU Smart — active now)\nBuilt-in knowledge for:\n- Algorithms: sorting, searching, trees, graphs\n- Python, JavaScript, TypeScript\n- React, Node.js, Express\n- SQL, Git, Docker, Linux\n- AI/ML concepts\n\n### 🌐 Online Mode (Switch to Gemini Flash Lite)\n- Answer ANY question with live AI\n- Analyze images, PDFs, voice notes\n- Deep reasoning with Gemini 2.5 Flash`;
+      return `## What NANU Can Do 🧠\n\n### 💻 Offline Mode (NANU Smart — active now)\nBuilt-in knowledge for:\n- Algorithms: sorting, searching, trees, graphs\n- Python, JavaScript, TypeScript\n- React, Node.js, Express\n- SQL, Git, Docker, Linux\n- AI/ML concepts\n\n### 🌐 Online Mode (Switch to NANU Flash)\n- Answer ANY question with live AI\n- Analyze images, PDFs, voice notes\n- Deep reasoning with Gemini 2.5 Flash`;
     }
 
     // Generic intelligent fallback
     const topic = p.length > 70 ? p.slice(0, 67) + "..." : p;
-    return `## Let me help! 💡\n\nYou asked: *"${topic}"*\n\nI'm **NANU Smart** in **Offline Mode**. I have built-in knowledge for:\n\n| Topic | Try asking... |\n|:---|:---|\n| 💻 Algorithms | "merge sort", "binary search" |\n| 🐍 Python / JS | "Python classes", "async await" |\n| ⚛️ React | "useState example", "useEffect" |\n| 🗄️ SQL | "SQL joins", "write a query" |\n| 🐙 Git | "git commands", "how to branch" |\n| 🐳 Docker | "Dockerfile example" |\n| 🐧 Linux | "linux commands cheatsheet" |\n| 🤖 AI/ML | "machine learning basics" |\n\n> 💡 Switch to **⚡ Gemini Flash Lite** for full AI answers on any topic!`;
+    return `## Let me help! 💡\n\nYou asked: *"${topic}"*\n\nI'm **NANU Smart** in **Offline Mode**. I have built-in knowledge for:\n\n| Topic | Try asking... |\n|:---|:---|\n| 💻 Algorithms | "merge sort", "binary search" |\n| 🐍 Python / JS | "Python classes", "async await" |\n| ⚛️ React | "useState example", "useEffect" |\n| 🗄️ SQL | "SQL joins", "write a query" |\n| 🐙 Git | "git commands", "how to branch" |\n| 🐳 Docker | "Dockerfile example" |\n| 🐧 Linux | "linux commands cheatsheet" |\n| 🤖 AI/ML | "machine learning basics" |\n\n> 💡 Switch to **⚡ NANU Flash** for full AI answers on any topic!`;
   }
 
   const answer = pickAnswer();
@@ -619,6 +619,7 @@ app.post("/api/chat", verify, async (req, res) => {
 
   // 1. Dedicated Local
   if (model === "nanu-smart") {
+    console.log("[NANU Smart] Handling locally. prompt: " + lastUserMsg.slice(0, 80));
     await streamFallback(lastUserMsg, res);
     res.end();
     return;
@@ -728,5 +729,7 @@ async function callOpenOpenAIWithFallback(finalMessages, model, temperature, api
 app.get("/health", (_req, res) => res.json({ ok: true, model: config.defaultModel }));
 
 app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
+
+
 
 
