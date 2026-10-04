@@ -114,3 +114,12 @@ document.getElementById('verifyForm').addEventListener('submit', async (e) => {
     btn.textContent = 'Reset & Log In';
   }
 });
+
+// Automatically switch view if URL contains mode=register or mode=login or mode=forgot
+(function checkUrlMode() {
+  const params = new URLSearchParams(window.location.search);
+  const mode = params.get('mode');
+  if (mode && ['login', 'register', 'forgot'].includes(mode)) {
+    switchView(mode);
+  }
+})();

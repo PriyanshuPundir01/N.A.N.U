@@ -16,9 +16,51 @@
       pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
     }
   </script>
-  <link href="style.css?v=3.2" rel="stylesheet" />
+  <link href="style.css?v=3.5" rel="stylesheet" />
 </head>
 <body>
+
+<!-- N.A.N.U Companion & Name Reveal Intro Splash -->
+<div class="intro-splash" id="introSplash">
+  <button class="intro-skip-btn" id="introSkipBtn" title="Skip animation">Skip ✕</button>
+  <div class="intro-content">
+    <!-- Companion Entity -->
+    <div class="companion-wrap">
+      <div class="companion-halo"></div>
+      <div class="companion-orbit-ring companion-orbit-1"></div>
+      <div class="companion-orbit-ring companion-orbit-2"></div>
+      <div class="companion-orbit-ring companion-orbit-3"></div>
+      <div class="companion-core">
+        <div class="companion-core-inner">
+          <div class="companion-face">
+            <div class="companion-eye eye-left"></div>
+            <div class="companion-eye eye-right"></div>
+          </div>
+        </div>
+      </div>
+      <div class="companion-sparkles">
+        <span class="sparkle s1">✦</span>
+        <span class="sparkle s2">✦</span>
+        <span class="sparkle s3">✦</span>
+        <span class="sparkle s4">✦</span>
+      </div>
+    </div>
+
+    <!-- Name Reveal -->
+    <div class="intro-name-wrap">
+      <div class="intro-name-reveal">
+        <span class="intro-letter l-1">N</span>
+        <span class="intro-dot d-1">.</span>
+        <span class="intro-letter l-2">A</span>
+        <span class="intro-dot d-2">.</span>
+        <span class="intro-letter l-3">N</span>
+        <span class="intro-dot d-3">.</span>
+        <span class="intro-letter l-4">U</span>
+      </div>
+      <div class="intro-tagline">Your Intelligent AI Companion</div>
+    </div>
+  </div>
+</div>
 
 <div class="app" id="app">
   <!-- Left Sidebar -->
@@ -48,10 +90,10 @@
     <!-- Sidebar Footer -->
     <div class="sidebar-footer">
       <div class="profile-widget" id="profileWidget" role="button" tabindex="0">
-        <div class="profile-avatar-badge">PP</div>
+        <div class="profile-avatar-badge" id="profileAvatarBadge">PP</div>
         <div class="profile-info">
-          <div class="profile-name">Priyanshu Pundir</div>
-          <div class="profile-plan">Free Plan</div>
+          <div class="profile-name" id="profileName">Priyanshu Pundir</div>
+          <div class="profile-plan" id="profilePlan">Free Plan</div>
         </div>
         <svg class="profile-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
       </div>
@@ -85,6 +127,11 @@
         <div class="chat-title" id="chatTitle">New Conversation</div>
       </div>
       <div class="topbar-right">
+        <!-- Guest Auth Buttons (shown when not logged in) -->
+        <div class="topbar-auth-group" id="topbarAuthGroup" style="display:none">
+          <a href="/auth.html?mode=login" class="topbar-auth-login">Log in</a>
+          <a href="/auth.html?mode=register" class="topbar-auth-signup">Sign up</a>
+        </div>
         <button class="topbar-pill-btn" id="shareChatBtn" title="Share chat">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
           <span>Share</span>
@@ -263,6 +310,36 @@
 
 
 
+<!-- Auth Required Modal (Shown when searching/interacting while not logged in) -->
+<div class="modal-overlay" id="authPromptModal" hidden>
+  <div class="modal modal-sm" role="dialog" aria-label="Sign In Required" style="max-width: 420px;">
+    <div class="modal-header">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <div class="orb-wrap" style="width: 22px; height: 22px;"><div class="orb"></div></div>
+        <h2 style="margin: 0; font-size: 17px;">Join <span class="gradient-text">N.A.N.U</span> to Continue</h2>
+      </div>
+      <button class="icon-btn-ghost" id="closeAuthPromptBtn" title="Close" aria-label="Close">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" style="text-align: center; padding: 20px 24px 24px;">
+      <div class="auth-prompt-orb-preview">
+        <div class="auth-prompt-orb-inner"></div>
+        <div class="auth-prompt-ring-1"></div>
+        <div class="auth-prompt-ring-2"></div>
+      </div>
+      <h3 style="font-size: 19px; font-weight: 700; margin: 12px 0 6px;" id="authPromptTitle">Sign in to search with N.A.N.U</h3>
+      <p style="font-size: 13.5px; color: var(--text-dim); line-height: 1.5; margin: 0 0 20px;" id="authPromptDesc">
+        Create a free account or log in to get instant AI answers, deep reasoning, voice dictation, and attachments.
+      </p>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <a href="/auth.html?mode=register" class="btn-primary" style="text-decoration: none; text-align: center; padding: 10px 16px; font-size: 14px; font-weight: 600; display: block; border-radius: 12px;">Sign Up Free</a>
+        <a href="/auth.html?mode=login" class="btn-ghost" style="text-decoration: none; text-align: center; padding: 10px 16px; font-size: 14px; font-weight: 500; display: block; border-radius: 12px; border: 1px solid var(--border);">Log In to Existing Account</a>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- System Prompt Modal -->
 <div class="modal-overlay" id="sysPromptModal" hidden>
   <div class="modal modal-sm" role="dialog" aria-label="System Prompt">
@@ -382,7 +459,7 @@
 
 <div class="toast" id="toast" hidden></div>
 
-<script src="client.js?v=3.3"></script>
+<script src="client.js?v=3.5"></script>
 </body>
 </html>
 

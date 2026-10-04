@@ -1,7 +1,4 @@
-const userToken = localStorage.getItem("nanu_token");
-if (!userToken) {
-  window.location.href = "/auth.html";
-}
+let userToken = localStorage.getItem("nanu_token");
 
 const PROXY_URL = (window.location.origin.startsWith("http")) ? "/api/chat" : "http://localhost:3000/api/chat";
 const DEFAULT_SYS = "You are N.A.N.U, a concise, helpful, and intelligent AI assistant. Think step by step when needed. Avoid unnecessary repetition. Format code cleanly in markdown.";
@@ -13,6 +10,17 @@ const SEND_ICON_HTML = `<svg class="send-icon-arrow" width="17" height="17" view
 const STOP_ICON_HTML = `<svg class="send-icon-stop" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>`;
 
 const $ = id => document.getElementById(id);
+const introSplash = $("introSplash");
+const introSkipBtn = $("introSkipBtn");
+const topbarAuthGroup = $("topbarAuthGroup");
+const authPromptModal = $("authPromptModal");
+const closeAuthPromptBtn = $("closeAuthPromptBtn");
+const authPromptTitle = $("authPromptTitle");
+const authPromptDesc = $("authPromptDesc");
+const profileAvatarBadge = $("profileAvatarBadge");
+const profileName = $("profileName");
+const profilePlan = $("profilePlan");
+
 const sidebar = $("sidebar");
 const sidebarToggle = $("sidebarToggle");
 const openSidebarBtn = $("openSidebarBtn");
@@ -52,6 +60,42 @@ const sysPromptMenu = $("sysPromptMenu");
 const profileEditMenu = $("profileEditMenu");
 const clearAllMenu = $("clearAllMenu");
 const logoutBtnMenu = $("logoutBtnMenu");
+
+function showAuthPrompt(desc, title) {
+  if (authPromptTitle && title) authPromptTitle.textContent = title;
+  if (authPromptDesc && desc) authPromptDesc.textContent = desc;
+  openModal(authPromptModal);
+}
+
+function initIntroAnimation() {
+  if (!introSplash) return;
+  let dismissed = false;
+
+  function dismissIntro() {
+    if (dismissed) return;
+    dismissed = true;
+    introSplash.classList.add("fade-out");
+    setTimeout(() => {
+      introSplash.style.display = "none";
+    }, 600);
+  }
+
+  // Auto transition to N.A.N.U interface after 2.5s companion + name reveal animation
+  const timer = setTimeout(dismissIntro, 2500);
+
+  if (introSkipBtn) {
+    introSkipBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      clearTimeout(timer);
+      dismissIntro();
+    });
+  }
+
+  introSplash.addEventListener("click", () => {
+    clearTimeout(timer);
+    dismissIntro();
+  });
+}
 
 let attachedFiles = [];
 let currentSpeakingBtn = null;
@@ -739,6 +783,10 @@ function updateSendButtonState() {
 }
 
 async function sendMessage(overrideContent) {
+  if (!userToken) {
+    showAuthPrompt("Sign up or log in to search, ask questions, and chat with N.A.N.U.");
+    return;
+  }
   const content = overrideContent !== undefined ? overrideContent : inputBox.value.trim();
   const currentAttachments = [...attachedFiles];
   if ((!content && currentAttachments.length === 0) || streaming) return;
@@ -1301,7 +1349,13 @@ if (closeClearChats) {
   });
 }
 
-[sysPromptModal, profileModal, clearChatsModal].forEach(modal => {
+if (closeAuthPromptBtn) {
+  closeAuthPromptBtn.addEventListener("click", () => {
+    closeModal(authPromptModal);
+  });
+}
+
+[sysPromptModal, profileModal, clearChatsModal, authPromptModal].forEach(modal => {
   if (!modal) return;
   modal.addEventListener("click", e => {
     if (e.target === modal) {
@@ -1322,6 +1376,10 @@ sendBtn.addEventListener("click", e => {
     showToast("Stopped.", "info");
     return;
   }
+  if (!userToken) {
+    showAuthPrompt("Sign up or log in to search, ask questions, and chat with N.A.N.U.");
+    return;
+  }
   if (inputBox.value.trim().length === 0 && attachedFiles.length === 0) return;
   sendMessage();
   inputBox.focus();
@@ -1335,6 +1393,10 @@ inputBox.addEventListener("keydown", e => {
         if (abort) abort.abort();
         setStreaming(false);
         showToast("Stopped.", "info");
+        return;
+      }
+      if (!userToken) {
+        showAuthPrompt("Sign up or log in to search, ask questions, and chat with N.A.N.U.");
         return;
       }
       if (inputBox.value.trim().length > 0 || attachedFiles.length > 0) {
@@ -1468,6 +1530,10 @@ if (composerMicBtn) {
   }
 
   composerMicBtn.addEventListener("click", () => {
+    if (!userToken) {
+      showAuthPrompt("Sign up or log in to use voice dictation with N.A.N.U.");
+      return;
+    }
     if (!recognition) {
       showToast("Speech recognition not supported in this browser. Try Chrome/Edge.", "error");
       return;
@@ -1560,6 +1626,10 @@ if ($("modelSelect")) {
 // Attachment button & file upload
 if (composerAddBtn && fileAttachmentInput) {
   composerAddBtn.addEventListener("click", () => {
+    if (!userToken) {
+      showAuthPrompt("Sign up or log in to attach and analyze files with N.A.N.U.");
+      return;
+    }
     fileAttachmentInput.click();
   });
   fileAttachmentInput.addEventListener("change", () => {
@@ -1589,6 +1659,10 @@ window.addEventListener("drop", e => {
   e.preventDefault();
   if (composer) composer.classList.remove("drag-highlight");
   if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+    if (!userToken) {
+      showAuthPrompt("Sign up or log in to attach and analyze files with N.A.N.U.");
+      return;
+    }
     processFiles(e.dataTransfer.files);
   }
 });
@@ -1596,6 +1670,10 @@ window.addEventListener("drop", e => {
 // Paste event (for screenshots or copied files/images)
 window.addEventListener("paste", e => {
   if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+    if (!userToken) {
+      showAuthPrompt("Sign up or log in to attach and analyze files with N.A.N.U.");
+      return;
+    }
     processFiles(e.clipboardData.files);
   }
 });
@@ -1626,6 +1704,10 @@ if (shareChatBtn) {
 if (profileWidget && profileMenu) {
   profileWidget.addEventListener("click", (e) => {
     e.stopPropagation();
+    if (!userToken) {
+      showAuthPrompt("Sign up or log in to manage your profile and account settings.");
+      return;
+    }
     profileMenu.hidden = !profileMenu.hidden;
   });
   document.addEventListener("click", (e) => {
@@ -1680,6 +1762,10 @@ document.querySelectorAll(".suggestion-card").forEach(card => {
     inputBox.value = prompt;
     autoGrow();
     updateSendButtonState();
+    if (!userToken) {
+      showAuthPrompt("Sign up or log in to ask questions and chat with N.A.N.U.");
+      return;
+    }
     sendMessage(prompt);
   });
 });
@@ -1697,11 +1783,26 @@ document.addEventListener("keydown", e => {
     closeModal(profileModal);
     resetClearChatsModal();
     closeModal(clearChatsModal);
+    closeModal(authPromptModal);
   }
 });
 
 // App Initialization
 (function init() {
+  initIntroAnimation();
+
+  // Setup Guest vs Authenticated UI
+  if (!userToken) {
+    if (topbarAuthGroup) topbarAuthGroup.style.display = "flex";
+    if (shareChatBtn) shareChatBtn.style.display = "none";
+    if (profileAvatarBadge) profileAvatarBadge.textContent = "👤";
+    if (profileName) profileName.textContent = "Guest User";
+    if (profilePlan) profilePlan.textContent = "Click to Log in";
+  } else {
+    if (topbarAuthGroup) topbarAuthGroup.style.display = "none";
+    if (shareChatBtn) shareChatBtn.style.display = "flex";
+  }
+
   const ids = Object.keys(chats);
   if (ids.length > 0) {
     const lastId = ids.sort((a, b) => chats[b].created - chats[a].created)[0];
@@ -1729,34 +1830,38 @@ document.addEventListener("keydown", e => {
   const initialInfo = MODEL_DISPLAY_INFO[savedModel] || { name: "Flash", icon: "⚡" };
   setActiveModel(savedModel, initialInfo.icon, initialInfo.name, false);
 
-  // Load server configured default free model if none set
-  fetch("/api/config", { headers: { "Authorization": "Bearer " + userToken } })
-    .then(r => r.ok ? r.json() : null)
-    .then(data => {
-      if (data && data.defaultModel) {
-        if (!localStorage.getItem("nanu_model")) {
-          const info = MODEL_DISPLAY_INFO[data.defaultModel] || { name: data.defaultModel, icon: "⚡" };
-          setActiveModel(data.defaultModel, info.icon, info.name, false);
-        } else if ($("modelSelect")) {
-          $("modelSelect").value = localStorage.getItem("nanu_model");
+  if (userToken) {
+    // Load server configured default free model if none set
+    fetch("/api/config", { headers: { "Authorization": "Bearer " + userToken } })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.defaultModel) {
+          if (!localStorage.getItem("nanu_model")) {
+            const info = MODEL_DISPLAY_INFO[data.defaultModel] || { name: data.defaultModel, icon: "⚡" };
+            setActiveModel(data.defaultModel, info.icon, info.name, false);
+          } else if ($("modelSelect")) {
+            $("modelSelect").value = localStorage.getItem("nanu_model");
+          }
         }
-      }
-    })
-    .catch(() => {});
+      })
+      .catch(() => {});
 
-  // Load current user profile info
-  fetch("/api/auth/me", { headers: { "Authorization": "Bearer " + userToken } })
-    .then(r => r.ok ? r.json() : null)
-    .then(data => {
-      if (data && data.email) {
-        window.userEmail = data.email;
-        const profileEmailInput = $("profileEmailInput");
-        if (profileEmailInput) profileEmailInput.value = "";
-        const profileName = document.querySelector(".profile-name");
-        if (profileName) profileName.textContent = data.email.split("@")[0];
-      }
-    })
-    .catch(() => {});
+    // Load current user profile info
+    fetch("/api/auth/me", { headers: { "Authorization": "Bearer " + userToken } })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && data.email) {
+          window.userEmail = data.email;
+          const profileEmailInput = $("profileEmailInput");
+          if (profileEmailInput) profileEmailInput.value = "";
+          const namePart = data.email.split("@")[0];
+          if (profileName) profileName.textContent = namePart;
+          if (profileAvatarBadge) profileAvatarBadge.textContent = namePart.substring(0, 2).toUpperCase();
+          if (profilePlan) profilePlan.textContent = "Pro Member";
+        }
+      })
+      .catch(() => {});
+  }
 })();
 
 
