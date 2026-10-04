@@ -25,6 +25,7 @@ const sidebar = $("sidebar");
 const sidebarToggle = $("sidebarToggle");
 const openSidebarBtn = $("openSidebarBtn");
 const historyList = $("historyList");
+const historyLabel = $("historyLabel");
 const newChatBtn = $("newChatBtn");
 const chatTitle = $("chatTitle");
 const statusPill = $("statusPill");
@@ -361,6 +362,7 @@ function newChat() {
 }
 
 function loadChat(id) {
+  if (!userToken) return;
   currentId = id;
   clearMessages();
   const chat = chats[id];
@@ -399,7 +401,13 @@ function deleteChat(id) {
 }
 
 function renderHistory() {
+  if (!historyList) return;
   historyList.innerHTML = "";
+  if (!userToken) {
+    if (historyLabel) historyLabel.style.display = "none";
+    return;
+  }
+  if (historyLabel) historyLabel.style.display = "block";
   const ids = Object.keys(chats).sort((a, b) => chats[b].created - chats[a].created);
   ids.forEach(id => {
     const chat = chats[id];
@@ -1426,6 +1434,16 @@ if (stopBtn) {
 }
 
 newChatBtn.addEventListener("click", () => {
+  if (!userToken) {
+    currentId = null;
+    clearMessages();
+    showEmpty();
+    inputBox.value = "";
+    autoGrow();
+    updateSendButtonState();
+    inputBox.focus();
+    return;
+  }
   newChat();
   inputBox.focus();
 });
@@ -1773,6 +1791,16 @@ document.querySelectorAll(".suggestion-card").forEach(card => {
 document.addEventListener("keydown", e => {
   if ((e.ctrlKey || e.metaKey) && e.key === "k") {
     e.preventDefault();
+    if (!userToken) {
+      currentId = null;
+      clearMessages();
+      showEmpty();
+      inputBox.value = "";
+      autoGrow();
+      updateSendButtonState();
+      inputBox.focus();
+      return;
+    }
     newChat();
     inputBox.focus();
   }
@@ -1791,25 +1819,30 @@ document.addEventListener("keydown", e => {
 (function init() {
   initIntroAnimation();
 
-  // Setup Guest vs Authenticated UI
+  // Setup Guest vs Authenticated UI & History
   if (!userToken) {
     if (topbarAuthGroup) topbarAuthGroup.style.display = "flex";
     if (shareChatBtn) shareChatBtn.style.display = "none";
     if (profileAvatarBadge) profileAvatarBadge.textContent = "👤";
     if (profileName) profileName.textContent = "Guest User";
     if (profilePlan) profilePlan.textContent = "Click to Log in";
+    if (historyLabel) historyLabel.style.display = "none";
+    currentId = null;
+    clearMessages();
+    showEmpty();
+    renderHistory();
   } else {
     if (topbarAuthGroup) topbarAuthGroup.style.display = "none";
     if (shareChatBtn) shareChatBtn.style.display = "flex";
-  }
-
-  const ids = Object.keys(chats);
-  if (ids.length > 0) {
-    const lastId = ids.sort((a, b) => chats[b].created - chats[a].created)[0];
-    renderHistory();
-    loadChat(lastId);
-  } else {
-    newChat();
+    if (historyLabel) historyLabel.style.display = "block";
+    const ids = Object.keys(chats);
+    if (ids.length > 0) {
+      const lastId = ids.sort((a, b) => chats[b].created - chats[a].created)[0];
+      renderHistory();
+      loadChat(lastId);
+    } else {
+      newChat();
+    }
   }
   const initTsEl = $("chatTimestamp");
   if (initTsEl) {
