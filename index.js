@@ -7,6 +7,7 @@ import path from "path";
 import fs from "fs";
 import crypto from "crypto";
 import { fileURLToPath } from "url";
+import nodemailer from "nodemailer";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -20,7 +21,11 @@ let config = {
   openaiBaseUrl: process.env.LLM_BASE_URL || "https://api.openai.com/v1",
   geminiKey: process.env.GEMINI_API_KEY || "",
   openrouterKey: process.env.OPENROUTER_API_KEY || "",
-  defaultModel: process.env.LLM_MODEL || "gemini-flash-lite-latest"
+  defaultModel: process.env.LLM_MODEL || "gemini-flash-lite-latest",
+  emailUser: process.env.EMAIL_USER || process.env.SMTP_USER || "",
+  emailPass: process.env.EMAIL_PASS || process.env.SMTP_PASS || "",
+  smtpHost: process.env.SMTP_HOST || "smtp.gmail.com",
+  smtpPort: parseInt(process.env.SMTP_PORT || "465", 10)
 };
 
 app.use(cors());
@@ -50,10 +55,16 @@ function saveUsers(users) {
 
 function verify(req, res, next) {
   const token = req.headers.authorization?.replace("Bearer ", "").trim();
-  if (CLIENT_TOKEN && CLIENT_TOKEN !== "change-this-client-token" && token === CLIENT_TOKEN) return next();
-  
   const users = getUsers();
-  if (token && users.find(u => u.token === token)) return next();
+  const foundUser = token ? users.find(u => u.token === token) : null;
+  if (foundUser) {
+    req.user = foundUser;
+    return next();
+  }
+  if (CLIENT_TOKEN && CLIENT_TOKEN !== "change-this-client-token" && token === CLIENT_TOKEN) {
+    req.user = users[0] || null;
+    return next();
+  }
   
   return res.status(401).json({ error: "Unauthorized. Please log in." });
 }
@@ -79,20 +90,88 @@ app.post("/api/auth/login", (req, res) => {
   res.json({ success: true, token: user.token });
 });
 
-app.post("/api/auth/forgot-password", (req, res) => {
-  const { email } = req.body;
+async function sendEmailOtp(toEmail, otp) {
+  if (!config.emailUser || !config.emailPass) {
+    console.warn(`\n[EMAIL SYSTEM] ⚠️ Live email dispatch is not configured: EMAIL_USER or EMAIL_PASS missing in .env.\n`);
+    return {
+      sent: false,
+      notConfigured: true,
+      error: "Live email dispatch is not configured. Please add your Gmail address and 16-character Gmail App Password in Settings (⚙️) or in your .env file (EMAIL_USER & EMAIL_PASS) so NANU can deliver OTPs directly to your inbox."
+    };
+  }
+
+  try {
+    const isGmail = config.emailUser.toLowerCase().endsWith("@gmail.com");
+    const cleanPass = config.emailPass.replace(/\s+/g, ""); // strip any spaces from Google App Password
+    const transporter = nodemailer.createTransport({
+      service: isGmail ? "gmail" : undefined,
+      host: isGmail ? undefined : config.smtpHost,
+      port: isGmail ? undefined : config.smtpPort,
+      secure: config.smtpPort === 465,
+      auth: {
+        user: config.emailUser,
+        pass: cleanPass
+      }
+    });
+
+    const info = await transporter.sendMail({
+      from: `"NANU AI" <${config.emailUser}>`,
+      to: toEmail,
+      subject: `Your NANU Verification Code: ${otp}`,
+      text: `Your NANU verification code is: ${otp}. It will expire in 10 minutes.`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b0f19; color: #f1f5f9; padding: 40px 20px; text-align: center;">
+          <div style="max-width: 480px; margin: 0 auto; background: #131b2e; border: 1px solid #1e293b; border-radius: 16px; padding: 32px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
+            <div style="font-size: 26px; font-weight: 800; color: #38bdf8; margin-bottom: 6px;">⚡ NANU AI</div>
+            <h2 style="font-size: 20px; font-weight: 600; color: #fff; margin: 0 0 14px;">Verification Code</h2>
+            <p style="font-size: 14px; color: #94a3b8; line-height: 1.5; margin-bottom: 20px;">Use the 6-digit verification code below to verify your email. This code will expire in 10 minutes.</p>
+            <div style="background: rgba(56, 189, 248, 0.1); border: 2px dashed #0284c7; border-radius: 12px; padding: 16px; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #38bdf8; display: inline-block; margin-bottom: 20px;">
+              ${otp}
+            </div>
+            <p style="font-size: 12px; color: #64748b; margin: 0; border-top: 1px solid #1e293b; padding-top: 14px;">If you did not request this verification code, please ignore this email.</p>
+          </div>
+        </div>
+      `
+    });
+
+    console.log(`\n[EMAIL SYSTEM] ✉️ Real email successfully delivered to ${toEmail}! MessageId: ${info.messageId}\n`);
+    return { sent: true };
+  } catch (err) {
+    console.error(`\n[EMAIL SYSTEM] ❌ SMTP delivery failed for ${toEmail}: ${err.message}\n`);
+    return {
+      sent: false,
+      error: `Email delivery failed: ${err.message}. Please verify your Gmail address and App Password.`
+    };
+  }
+}
+
+app.post("/api/auth/forgot-password", async (req, res) => {
+  const { email } = req.body || {};
+  if (!email) return res.status(400).json({ error: "Email address required" });
+
   const users = getUsers();
-  const user = users.find(u => u.email === email);
-  if (!user) return res.status(404).json({ error: "Account not found" });
+  const user = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
+  if (!user) return res.status(404).json({ error: "No account found with that email address" });
   
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   user.otp = otp;
   user.otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
   saveUsers(users);
   
-  // Simulated email delivery via console
-  console.log(`\n\n[AUTH SYSTEM] 🔑 Forgot Password OTP for ${email} is: ${otp}\n\n`);
-  res.json({ success: true });
+  const emailRes = await sendEmailOtp(user.email, otp);
+  if (!emailRes.sent) {
+    return res.status(400).json({
+      error: emailRes.error || "Email delivery failed. Please check your SMTP configuration."
+    });
+  }
+
+  // The OTP is strictly sent only to the user's email inbox — NEVER returned to the client
+  return res.json({
+    success: true,
+    email: user.email,
+    sent: true,
+    message: "A 6-digit verification OTP has been sent to your email. Please check your inbox and spam folder."
+  });
 });
 
 app.post("/api/auth/reset-password", (req, res) => {
@@ -112,18 +191,103 @@ app.post("/api/auth/reset-password", (req, res) => {
   res.json({ success: true, token: user.token });
 });
 
-app.post("/api/auth/update-profile", verify, (req, res) => {
-  const token = req.headers.authorization?.replace("Bearer ", "").trim();
-  const { newPassword } = req.body;
-  if (!newPassword) return res.status(400).json({ error: "New password required" });
-  
-  const users = getUsers();
-  const user = users.find(u => u.token === token);
+app.get("/api/auth/me", verify, (req, res) => {
+  const user = req.user;
   if (!user) return res.status(404).json({ error: "User not found" });
-  
-  user.password = newPassword;
+  res.json({ email: user.email });
+});
+
+app.post("/api/auth/send-profile-otp", verify, async (req, res) => {
+  const user = req.user;
+  if (!user) return res.status(404).json({ error: "User not found" });
+  const { email } = req.body || {};
+
+  if (!email || typeof email !== "string" || !email.includes("@")) {
+    return res.status(400).json({ error: "Please enter a valid email address." });
+  }
+
+  if (email.trim().toLowerCase() !== user.email.toLowerCase()) {
+    return res.status(400).json({ error: `The entered email (${email}) does not match your registered account email.` });
+  }
+
+  const users = getUsers();
+  const targetUser = users.find(u => u.email.toLowerCase() === user.email.toLowerCase());
+  if (!targetUser) return res.status(404).json({ error: "User not found" });
+
+  const otp = Math.floor(100000 + Math.random() * 900000).toString();
+  targetUser.otp = otp;
+  targetUser.otpExpiry = Date.now() + 10 * 60 * 1000; // 10 minutes
   saveUsers(users);
-  res.json({ success: true });
+
+  const emailRes = await sendEmailOtp(targetUser.email, otp);
+  if (!emailRes.sent) {
+    return res.status(400).json({
+      error: emailRes.error || "Email delivery failed. Please check your SMTP configuration."
+    });
+  }
+
+  // Strictly deliver to email only — never return OTP in response
+  return res.json({
+    success: true,
+    email: targetUser.email,
+    sent: true,
+    message: `✓ A 6-digit verification OTP has been sent to your registered email (${targetUser.email}). Please check your inbox and spam folder.`
+  });
+});
+
+app.post("/api/auth/verify-profile-otp", verify, (req, res) => {
+  const user = req.user;
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const { email, otp } = req.body || {};
+  if (!otp || String(otp).trim().length !== 6) {
+    return res.status(400).json({ error: "Please enter the complete 6-digit OTP code." });
+  }
+
+  const users = getUsers();
+  const targetUser = users.find(u => u.email.toLowerCase() === user.email.toLowerCase());
+  if (!targetUser) return res.status(404).json({ error: "User not found" });
+
+  if (email && email.trim().toLowerCase() !== targetUser.email.toLowerCase()) {
+    return res.status(400).json({ error: "Email does not match your registered account." });
+  }
+
+  if (!targetUser.otp || targetUser.otp !== String(otp).trim() || Date.now() > targetUser.otpExpiry) {
+    return res.status(400).json({ error: "Invalid or expired OTP code. Please click Resend OTP if needed." });
+  }
+
+  res.json({ success: true, message: "OTP confirmed successfully." });
+});
+
+app.post("/api/auth/update-profile", verify, (req, res) => {
+  const user = req.user;
+  if (!user) return res.status(404).json({ error: "User not found" });
+
+  const { email, otp, newPassword } = req.body;
+  if (!otp) return res.status(400).json({ error: "OTP verification code is required" });
+  if (!newPassword || newPassword.length < 6) {
+    return res.status(400).json({ error: "New password must be at least 6 characters" });
+  }
+
+  const users = getUsers();
+  const targetUser = users.find(u => u.email.toLowerCase() === user.email.toLowerCase());
+  if (!targetUser) return res.status(404).json({ error: "User not found" });
+
+  if (email && email.trim().toLowerCase() !== targetUser.email.toLowerCase()) {
+    return res.status(400).json({ error: "Email does not match your registered account." });
+  }
+
+  if (!targetUser.otp || targetUser.otp !== String(otp).trim() || Date.now() > targetUser.otpExpiry) {
+    return res.status(400).json({ error: "Invalid or expired OTP code. Please request a new code." });
+  }
+
+  targetUser.password = newPassword;
+  targetUser.otp = null;
+  targetUser.otpExpiry = null;
+  saveUsers(users);
+
+  console.log(`\n\n[AUTH SYSTEM] ✅ Password successfully updated for ${targetUser.email}!\n\n`);
+  res.json({ success: true, message: "Password updated successfully" });
 });
 
 app.get("/api/config", verify, (_req, res) => {
@@ -131,17 +295,21 @@ app.get("/api/config", verify, (_req, res) => {
     hasOpenAI: Boolean(config.openaiKey && !config.openaiKey.startsWith("sk-...")),
     hasGemini: Boolean(config.geminiKey),
     hasOpenRouter: Boolean(config.openrouterKey),
+    hasEmailSmtp: Boolean(config.emailUser && config.emailPass),
+    emailUser: config.emailUser || "",
     defaultModel: config.defaultModel
   });
 });
 
 app.post("/api/settings", verify, (req, res) => {
-  const { openaiKey, geminiKey, openrouterKey, defaultModel, openaiBaseUrl } = req.body || {};
+  const { openaiKey, geminiKey, openrouterKey, defaultModel, openaiBaseUrl, emailUser, emailPass } = req.body || {};
   if (openaiKey !== undefined) config.openaiKey = openaiKey.trim();
   if (geminiKey !== undefined) config.geminiKey = geminiKey.trim();
   if (openrouterKey !== undefined) config.openrouterKey = openrouterKey.trim();
   if (defaultModel) config.defaultModel = defaultModel.trim();
   if (openaiBaseUrl) config.openaiBaseUrl = openaiBaseUrl.trim();
+  if (emailUser !== undefined) config.emailUser = emailUser.trim();
+  if (emailPass !== undefined && emailPass.trim() !== "") config.emailPass = emailPass.trim().replace(/\s+/g, "");
 
   try {
     const envPath = path.join(__dirname, ".env");
@@ -151,12 +319,19 @@ app.post("/api/settings", verify, (req, res) => {
     content += `LLM_MODEL=${config.defaultModel}\n`;
     content += `GEMINI_API_KEY=${config.geminiKey}\n`;
     content += `OPENROUTER_API_KEY=${config.openrouterKey}\n`;
+    if (config.emailUser) content += `EMAIL_USER=${config.emailUser}\n`;
+    if (config.emailPass) content += `EMAIL_PASS=${config.emailPass}\n`;
     fs.writeFileSync(envPath, content, "utf8");
   } catch (err) {
     console.warn("Could not save to .env file:", err.message);
   }
 
-  res.json({ success: true, config: { defaultModel: config.defaultModel } });
+  res.json({
+    success: true,
+    hasEmailSmtp: Boolean(config.emailUser && config.emailPass),
+    emailUser: config.emailUser || "",
+    config: { defaultModel: config.defaultModel }
+  });
 });
 
 app.get("/api/models", verify, (_req, res) => {
@@ -340,8 +515,9 @@ async function callGemini(messages, model, customKey, res) {
     requestBody.systemInstruction = { parts: [{ text: sysMsg.content }] };
   }
 
-  // For Gemini 2.5 Flash: enable thinking mode for spectacular reasoning
-  const isThinkingModel = model === "gemini-2.0-flash";
+  // Model mapping & thinking mode
+  const mappedModel = model === "gemini-2.0-flash" ? "gemini-3.8-flash" : model;
+  const isThinkingModel = model === "gemini-2.0-flash" || model === "gemini-3.8-flash";
   if (isThinkingModel) {
     requestBody.generationConfig = {
       ...requestBody.generationConfig,
@@ -351,7 +527,7 @@ async function callGemini(messages, model, customKey, res) {
 
   // Cascading: try selected model first, then stable fallback
   const rawCandidateModels = [
-    model && model.startsWith("gemini") ? model : "gemini-flash-lite-latest",
+    mappedModel && mappedModel.startsWith("gemini") ? mappedModel : "gemini-flash-lite-latest",
     "gemini-flash-lite-latest"
   ];
   const candidateModels = [...new Set(rawCandidateModels)];
@@ -451,7 +627,7 @@ async function callOpenRouter(messages, model, customKey, res) {
 }
 
 // NANU Smart — Comprehensive Local AI Engine (No API required)
-async function streamFallback(prompt, res, notice = "") {
+async function streamFallback(prompt, res, notice = "", clientTimeInfo = null) {
   if (notice) {
     res.write(notice + "\n\n");
   }
@@ -460,6 +636,39 @@ async function streamFallback(prompt, res, notice = "") {
   const lower = p.toLowerCase();
 
   function pickAnswer() {
+    // Current Time & Date query
+    if (
+      /(what('?s| is) (the )?(current )?(time|date|day|year|month)|what time is it|current (time|date)|today'?s date|what day is (it|today)|tell me the (time|date)|date and time|what year is it)/i.test(lower) ||
+      /^(time|date|day|today)[!?\s]*$/i.test(p.trim())
+    ) {
+      const d = clientTimeInfo?.date ? new Date(clientTimeInfo.date) : new Date();
+      const validDate = isNaN(d.getTime()) ? new Date() : d;
+      const tz = clientTimeInfo?.timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Local";
+      const timeStr = validDate.toLocaleTimeString("en-US", { timeZone: tz, hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true });
+      const dateStr = validDate.toLocaleDateString("en-US", { timeZone: tz, weekday: "long", year: "numeric", month: "long", day: "numeric" });
+      
+      const asksTime = /time/i.test(lower) && !/date/i.test(lower);
+      const asksDate = /date|day|today|month|year/i.test(lower) && !/time/i.test(lower);
+
+      if (asksTime) {
+        return `## ⏰ Current Time\n\nIt is currently **${timeStr}** (${tz}).`;
+      } else if (asksDate) {
+        return `## 📅 Today's Date\n\nToday is **${dateStr}**.\n\n*(Current time: ${timeStr} ${tz})*`;
+      } else {
+        return `## ⏰ Current Date & Time\n\n- **Date:** ${dateStr}\n- **Time:** ${timeStr} (${tz})`;
+      }
+    }
+
+    // Password Change / Reset query
+    if (/change (my )?password|reset (my )?password|update (my )?password|forgot password/i.test(lower)) {
+      return `## 🔐 Change Password — Verification Required\n\nTo securely change your password, **please type your registered email address**.\n\nA random 6-digit OTP will be sent to your registered email to verify your email before you can set a new password.`;
+    }
+
+    // Clear Chats query
+    if (/(?:clear|delete|remove)\s+(?:all\s+)?(?:the\s+)?(?:previous\s+)?(?:chat|chats|conversation|history)/i.test(lower)) {
+      return `## ⚠️ Clear Previous Chats\n\nAre you sure you want to delete all previous chats? This action **cannot be undone**.\n\nPlease type **confirm** to permanently delete your previous chats.`;
+    }
+
     // Greetings
     if (/^(hi|hello|hey|howdy|sup|yo|hiya|good (morning|afternoon|evening)|namaste)[!?\s]*$/i.test(p.trim())) {
       return `# Hey there! 👋\n\nI'm **NANU**, your intelligent AI assistant running in **Offline Mode**.\n\nI can help with:\n- 💻 **Algorithms** — sorting, searching, data structures\n- 🐍 **Python / JS / TS** — code examples and explanations\n- ⚛️ **React / Node.js** — components, hooks, APIs\n- 🗄️ **SQL** — queries, joins, schema design\n- 🐙 **Git / Docker / Linux** — commands and workflows\n- 🤖 **AI/ML** — concepts, architectures, use cases\n\nWhat would you like to explore?`;
@@ -580,13 +789,166 @@ async function streamFallback(prompt, res, notice = "") {
   }
 }
 
+async function handleChatPasswordChange(cleanMessages, reqUser, res) {
+  const lastUserMsg = cleanMessages.filter(m => m.role === "user").pop()?.content || "";
+  const lastAssistantMsg = cleanMessages.filter(m => m.role === "assistant").pop()?.content || "";
+  const userLower = lastUserMsg.toLowerCase();
+  const assistantLower = lastAssistantMsg.toLowerCase();
+
+  const isAskingPasswordChange = /(?:change|reset|update|forgot)\s+(?:my\s+)?password|password\s+change/i.test(lastUserMsg);
+  const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/;
+  const emailMatch = lastUserMsg.match(emailRegex);
+  const otpMatch = lastUserMsg.match(/\b\d{6}\b/);
+
+  const conversationHasPasswordIntent = cleanMessages.some(m => /(?:change|reset|update|forgot)\s+(?:my\s+)?password|password\s+change/i.test(m.content || ""));
+  const isAwaitingEmail = assistantLower.includes("email") || assistantLower.includes("verification required");
+  const isAwaitingOtp = assistantLower.includes("otp") || assistantLower.includes("verification code") || assistantLower.includes("6-digit");
+  const isAwaitingNewPass = assistantLower.includes("reply with your new password");
+
+  // Step 1: User says "change my password" (without providing email or OTP)
+  if (isAskingPasswordChange && !emailMatch && !otpMatch) {
+    const text = `## 🔐 Change Password — Verification Required\n\nTo securely change your password, **please type your registered email address**.\n\nA random 6-digit OTP will be sent to your registered email to verify your identity before you can change your password.`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end(text);
+    return true;
+  }
+
+  // Step 2: Email provided (either with password change request or in response to AI asking for email)
+  if (emailMatch && !otpMatch && (isAskingPasswordChange || isAwaitingEmail || conversationHasPasswordIntent || userLower.includes("email") || userLower.includes("otp"))) {
+    const targetEmail = emailMatch[0].toLowerCase();
+    const users = getUsers();
+    const targetUser = users.find(u => u.email.toLowerCase() === targetEmail);
+
+    if (!targetUser || (reqUser && reqUser.email && reqUser.email.toLowerCase() !== targetEmail)) {
+      const text = `❌ **Registered Email Verification Failed**\n\nThe email **${targetEmail}** does not match your registered account email.\n\nPlease type your registered email address to verify.`;
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.end(text);
+      return true;
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    targetUser.otp = otp;
+    targetUser.otpExpiry = Date.now() + 10 * 60 * 1000;
+    saveUsers(users);
+
+    const emailRes = await sendEmailOtp(targetEmail, otp);
+    let text = "";
+    if (emailRes.sent) {
+      text = `## ✉️ Verification OTP Sent to Email\n\nA 6-digit verification code has been dispatched to your registered email **${targetEmail}**.\n\n📬 **Please check your email inbox (and spam folder)** to get your verification code.\n\nOnce you receive your OTP from your email, please reply with:\n1. **Your 6-digit OTP code**\n2. **Your new password** (at least 6 characters)\n\n*Example: \`OTP: [code-from-email], New password: mySecretPassword123\`*`;
+    } else {
+      text = `❌ **Email Delivery Failed**\n\n${emailRes.error || "Could not deliver email to your inbox."}\n\nTo enable OTP delivery to your email inbox, please configure your Gmail address and 16-character Google App Password in **Settings (⚙️)** or add \`EMAIL_USER\` and \`EMAIL_PASS\` to your \`.env\` file.`;
+    }
+
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end(text);
+    return true;
+  }
+
+  // Step 3: User provides OTP (and optionally new password)
+  if (otpMatch && (isAwaitingOtp || userLower.includes("otp") || userLower.includes("password") || userLower.includes("code"))) {
+    const submittedOtp = otpMatch[0];
+    const users = getUsers();
+    let targetUser = users.find(u => u.otp === submittedOtp && Date.now() <= u.otpExpiry);
+    if (!targetUser && reqUser && reqUser.otp === submittedOtp && Date.now() <= reqUser.otpExpiry) {
+      targetUser = users.find(u => u.token === reqUser.token);
+    }
+
+    if (!targetUser) {
+      const text = `❌ **Invalid or Expired OTP Code**\n\nThe 6-digit OTP code **${submittedOtp}** is incorrect or has expired.\n\nPlease check your email inbox or request a new code.`;
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.end(text);
+      return true;
+    }
+
+    // Check for new password
+    let passCandidate = "";
+    const passMatch = lastUserMsg.match(/(?:new\s*password|password|pass)\s*(?:is|:|=)?\s*([^\n\r,;]+)/i);
+    if (passMatch && passMatch[1].trim()) {
+      passCandidate = passMatch[1].trim();
+    } else {
+      const cleaned = lastUserMsg.replace(submittedOtp, "").replace(/otp/gi, "").replace(/new/gi, "").replace(/password/gi, "").replace(/[:=,]/g, "").trim();
+      if (cleaned.length >= 6) {
+        passCandidate = cleaned.split(/\s+/)[0];
+      }
+    }
+
+    if (!passCandidate || passCandidate.length < 6) {
+      const text = `## ✅ OTP Code Verified!\n\nYour 6-digit OTP **${submittedOtp}** has been successfully verified.\n\nNow, please reply with your **new password** (must be at least 6 characters) to save the update.`;
+      res.setHeader("Content-Type", "text/plain; charset=utf-8");
+      res.end(text);
+      return true;
+    }
+
+    targetUser.password = passCandidate;
+    targetUser.otp = null;
+    targetUser.otpExpiry = null;
+    saveUsers(users);
+
+    console.log(`\n\n[AUTH SYSTEM] 🎉 Password successfully updated for ${targetUser.email} via AI Chat!\n\n`);
+
+    const text = `## 🎉 Password Successfully Updated!\n\nYour 6-digit OTP code has been verified and your account password for **${targetUser.email}** has been updated successfully!\n\nYou can now use your new password for all future logins.`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end(text);
+    return true;
+  }
+
+  // Step 4: User provides just the new password after OTP was verified
+  if (isAwaitingNewPass && !otpMatch) {
+    const candidate = lastUserMsg.trim().split(/\s+/)[0];
+    if (candidate.length >= 6 && reqUser) {
+      const users = getUsers();
+      const targetUser = users.find(u => u.token === reqUser.token);
+      if (targetUser) {
+        targetUser.password = candidate;
+        targetUser.otp = null;
+        targetUser.otpExpiry = null;
+        saveUsers(users);
+        console.log(`\n\n[AUTH SYSTEM] 🎉 Password successfully updated for ${targetUser.email} via AI Chat!\n\n`);
+        const text = `## 🎉 Password Successfully Updated!\n\nYour account password for **${targetUser.email}** has been updated successfully!\n\nYou can now use your new password for future logins.`;
+        res.setHeader("Content-Type", "text/plain; charset=utf-8");
+        res.end(text);
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+async function handleChatClearChats(cleanMessages, res) {
+  const lastUserMsg = cleanMessages.filter(m => m.role === "user").pop()?.content || "";
+  const lastAssistantMsg = cleanMessages.filter(m => m.role === "assistant").pop()?.content || "";
+  const userTrim = lastUserMsg.trim().toLowerCase();
+  const assistantLower = lastAssistantMsg.toLowerCase();
+
+  // User asking to clear chats
+  if (/(?:clear|delete|remove)\s+(?:all\s+)?(?:the\s+)?(?:previous\s+)?(?:chat|chats|conversation|history)/i.test(lastUserMsg)) {
+    const text = `## ⚠️ Clear Previous Chats\n\nAre you sure you want to delete all previous chats? This action **cannot be undone**.\n\nPlease type **confirm** to permanently delete your previous chats.`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end(text);
+    return true;
+  }
+
+  // User types confirm following the confirmation prompt
+  if (userTrim === "confirm" && (assistantLower.includes("type confirm") || assistantLower.includes("clear previous chats") || assistantLower.includes("delete all previous chats"))) {
+    const text = `## 🗑️ Chats Cleared\n\nAll your previous chats have been permanently deleted. [CLEAR_CHATS_CONFIRMED]`;
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.end(text);
+    return true;
+  }
+
+  return false;
+}
+
 app.post("/api/chat", verify, async (req, res) => {
   const {
     messages = [],
     temperature = 0.7,
     model = config.defaultModel || "gemini-flash-latest",
     system = null,
-    apiKey = null
+    apiKey = null,
+    timeZone = null,
+    clientTime = null
   } = req.body || {};
 
   // Clean and validate messages array
@@ -604,7 +966,31 @@ app.post("/api/chat", verify, async (req, res) => {
     return res.status(400).json({ error: "messages array cannot be empty" });
   }
 
-  const systemContent = system || "You are NANU, a fast, intelligent, helpful AI assistant. Format code in markdown.";
+  // Real-time temporal anchor for accurate time and date responses
+  const userTimeZone = timeZone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const userClientDate = clientTime ? new Date(clientTime) : new Date();
+  const validClientDate = isNaN(userClientDate.getTime()) ? new Date() : userClientDate;
+  const clientTimeInfo = { date: validClientDate, timeZone: userTimeZone };
+
+  const formattedTime = validClientDate.toLocaleTimeString("en-US", {
+    timeZone: userTimeZone,
+    hour: "numeric",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: true
+  });
+  const formattedDate = validClientDate.toLocaleDateString("en-US", {
+    timeZone: userTimeZone,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric"
+  });
+
+  const baseSys = system || "You are NANU, a fast, intelligent, helpful AI assistant. Format code in markdown.";
+  const temporalInstruction = `\n\n[Real-Time System Context: Today is ${formattedDate}. The current local time is ${formattedTime} (${userTimeZone}). When asked about the current time, date, day of the week, month, or year, always answer accurately and concisely based on this information.]\n\n[Security Policy - Password Changes: Password changes strictly require 6-digit OTP verification. When a user asks to change or reset their password, ALWAYS first ask them to type their registered email address. Once they provide their registered email, a random 6-digit OTP is sent to that email, and they must verify the 6-digit OTP code before updating their password.]\n\n[Chat History Policy - Clearing Chats: When a user asks to clear or delete previous chats or conversation history, ALWAYS ask them to type "confirm" before permanently deleting previous chats.]`;
+  const systemContent = baseSys + temporalInstruction;
+
   const finalMessages = [
     { role: "system", content: systemContent },
     ...cleanMessages.filter(m => m.role !== "system")
@@ -616,6 +1002,16 @@ app.post("/api/chat", verify, async (req, res) => {
   res.setHeader("X-Content-Type-Options", "nosniff");
 
   const lastUserMsg = cleanMessages.filter(m => m.role === "user").pop()?.content || "";
+
+  // Handle clear chat conversational flow with "confirm" requirement directly
+  if (await handleChatClearChats(cleanMessages, res)) {
+    return;
+  }
+
+  // Handle password change conversational flow with OTP verification directly
+  if (await handleChatPasswordChange(cleanMessages, req.user, res)) {
+    return;
+  }
 
   // 1. NANU Smart — routes through Gemini Flash Lite for full AI capability
   //    Falls back to built-in local engine only if API is unavailable
@@ -631,7 +1027,7 @@ app.post("/api/chat", verify, async (req, res) => {
       }
     }
     // Fallback to local engine when offline or no API key
-    await streamFallback(lastUserMsg, res);
+    await streamFallback(lastUserMsg, res, "", clientTimeInfo);
     res.end();
     return;
   }
@@ -652,7 +1048,7 @@ app.post("/api/chat", verify, async (req, res) => {
           return;
         } catch (orErr) {}
       }
-      await streamFallback(lastUserMsg, res, `> ⚠️ *Live AI is currently busy. Answered via NANU engine:*`);
+      await streamFallback(lastUserMsg, res, `> ⚠️ *Live AI is currently busy. Answered via NANU engine:*`, clientTimeInfo);
       res.end();
       return;
     }
@@ -674,7 +1070,7 @@ app.post("/api/chat", verify, async (req, res) => {
           return;
         } catch (gErr) {}
       }
-      await streamFallback(lastUserMsg, res, `> ⚠️ *Rate limit reached. Answered via NANU engine:*`);
+      await streamFallback(lastUserMsg, res, `> ⚠️ *Rate limit reached. Answered via NANU engine:*`, clientTimeInfo);
       res.end();
       return;
     }
@@ -682,7 +1078,7 @@ app.post("/api/chat", verify, async (req, res) => {
 
   // 4. OpenAI model
   try {
-    await callOpenOpenAIWithFallback(finalMessages, model, temperature, apiKey, lastUserMsg, res);
+    await callOpenOpenAIWithFallback(finalMessages, model, temperature, apiKey, lastUserMsg, res, clientTimeInfo);
   } catch (err) {
     console.error("OpenAI execution error:", err);
     if (!res.writableEnded) {
@@ -691,7 +1087,7 @@ app.post("/api/chat", verify, async (req, res) => {
   }
 });
 
-async function callOpenOpenAIWithFallback(finalMessages, model, temperature, apiKey, lastUserMsg, res) {
+async function callOpenOpenAIWithFallback(finalMessages, model, temperature, apiKey, lastUserMsg, res, clientTimeInfo = null) {
   try {
     await callOpenAI(finalMessages, model, temperature, apiKey, res);
     res.end();
@@ -722,7 +1118,7 @@ async function callOpenOpenAIWithFallback(finalMessages, model, temperature, api
       }
 
       const notice = `> ℹ️ *Note: OpenAI API has 0 prepaid credits. Add credits at platform.openai.com/billing or configure Gemini in Settings.*`;
-      await streamFallback(lastUserMsg, res, notice);
+      await streamFallback(lastUserMsg, res, notice, clientTimeInfo);
       res.end();
       return;
     }

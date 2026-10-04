@@ -1,4 +1,4 @@
-﻿const userToken = localStorage.getItem("nanu_token");
+const userToken = localStorage.getItem("nanu_token");
 if (!userToken) {
   window.location.href = "/auth.html";
 }
@@ -9,13 +9,15 @@ const DEFAULT_SYS = "You are NANU, a concise, helpful, and intelligent AI assist
 let sysPrompt = localStorage.getItem("nanu_sys") || DEFAULT_SYS;
 let isThinkingEnabled = false;
 
+const SEND_ICON_HTML = `<svg class="send-icon-arrow" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>`;
+const STOP_ICON_HTML = `<svg class="send-icon-stop" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2.5"/></svg>`;
+
 const $ = id => document.getElementById(id);
 const sidebar = $("sidebar");
 const sidebarToggle = $("sidebarToggle");
 const openSidebarBtn = $("openSidebarBtn");
 const historyList = $("historyList");
 const newChatBtn = $("newChatBtn");
-const topbarNewChat = $("topbarNewChat");
 const chatTitle = $("chatTitle");
 const statusPill = $("statusPill");
 const stopBtn = $("stopBtn");
@@ -26,8 +28,6 @@ const inputBox = $("inputBox");
 const sendBtn = $("sendBtn");
 const charCount = $("charCount");
 const themeToggle = $("themeToggle");
-const settingsTrigger = $("settingsTrigger");
-const settingsModal = $("settingsModal");
 const sysPromptModal = $("sysPromptModal");
 const profileModal = $("profileModal");
 const toast = $("toast");
@@ -48,7 +48,6 @@ const attachmentPreviewBar = $("attachmentPreviewBar");
 const shareChatBtn = $("shareChatBtn");
 const profileWidget = $("profileWidget");
 const profileMenu = $("profileMenu");
-const settingsTriggerMenu = $("settingsTriggerMenu");
 const sysPromptMenu = $("sysPromptMenu");
 const profileEditMenu = $("profileEditMenu");
 const clearAllMenu = $("clearAllMenu");
@@ -201,9 +200,38 @@ function toggleReadAloud(btn, text) {
   showToast("Reading aloud… 🔊");
 }
 
-function attachBubbleActions(actionBarContainer, msgContent) {
+function formatChatTimestamp(ts) {
+  const d = ts ? new Date(ts) : new Date();
+  if (isNaN(d.getTime())) return "Today";
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const yesterday = new Date();
+  yesterday.setDate(now.getDate() - 1);
+  const isYesterday = d.toDateString() === yesterday.toDateString();
+  const timeStr = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+
+  if (isToday) {
+    return `Today at ${timeStr}`;
+  } else if (isYesterday) {
+    return `Yesterday at ${timeStr}`;
+  } else {
+    const isThisYear = d.getFullYear() === now.getFullYear();
+    const dateStr = d.toLocaleDateString([], {
+      month: "short",
+      day: "numeric",
+      year: isThisYear ? undefined : "numeric"
+    });
+    return `${dateStr} · ${timeStr}`;
+  }
+}
+
+function attachBubbleActions(actionBarContainer, msgContent, msgTimestamp = null) {
   const existingBar = actionBarContainer.querySelector(".bubble-actions");
   if (existingBar) existingBar.remove();
+
+  const timeStr = msgTimestamp
+    ? new Date(msgTimestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+    : new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 
   const actionBar = document.createElement("div");
   actionBar.className = "bubble-actions";
@@ -223,6 +251,7 @@ function attachBubbleActions(actionBarContainer, msgContent) {
     <button class="action-btn regen-btn" title="Regenerate" aria-label="Regenerate">
       <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
     </button>
+    <span class="action-time">${timeStr}</span>
   `;
 
   const copyBtn = actionBar.querySelector(".copy-msg-btn");
@@ -293,6 +322,10 @@ function loadChat(id) {
   const chat = chats[id];
   if (!chat) return;
   chatTitle.textContent = chat.title;
+  const tsEl = $("chatTimestamp");
+  if (tsEl) {
+    tsEl.textContent = formatChatTimestamp(chat.created);
+  }
   const userMsgs = chat.messages.filter(m => m.role !== "system");
   if (userMsgs.length === 0) {
     showEmpty();
@@ -301,9 +334,9 @@ function loadChat(id) {
   hideEmpty();
   userMsgs.forEach(m => {
     if (m.role === "user") {
-      appendBubble("user", m.content, false, false, m.attachments || []);
+      appendBubble("user", m.content, false, false, m.attachments || [], m.time);
     } else {
-      appendBubble("assistant", m.content, false, true);
+      appendBubble("assistant", m.content, false, true, [], m.time);
     }
   });
   renderHistory();
@@ -366,16 +399,21 @@ function hideEmpty() {
 }
 
 function clearMessages() {
-  messagesEl.innerHTML = `<div class="chat-timestamp" id="chatTimestamp">Today 12:00 PM</div>`;
+  const chatTime = currentId && chats[currentId] ? chats[currentId].created : Date.now();
+  messagesEl.innerHTML = `<div class="chat-timestamp" id="chatTimestamp">${formatChatTimestamp(chatTime)}</div>`;
   chatTitle.textContent = "New Conversation";
 }
 
 function setStreaming(on) {
   streaming = on;
-  statusPill.textContent = on ? "Generating…" : "Idle";
-  statusPill.classList.toggle("on", on);
-  stopBtn.style.display = on ? "flex" : "none";
-  sendBtn.disabled = on;
+  if (statusPill) {
+    statusPill.textContent = on ? "Generating…" : "Idle";
+    statusPill.classList.toggle("on", on);
+  }
+  if (stopBtn) {
+    stopBtn.style.display = on ? "flex" : "none";
+  }
+  updateSendButtonState();
 }
 
 function showToast(msg, type = "success") {
@@ -397,16 +435,18 @@ function updateTitle(text) {
   renderHistory();
 }
 
-function appendBubble(role, text = "", typing = false, preRendered = false, attachments = []) {
+function appendBubble(role, text = "", typing = false, preRendered = false, attachments = [], timestamp = null) {
   hideEmpty();
 
-  if (!messagesEl.querySelector(".chat-timestamp")) {
-    const ts = document.createElement("div");
+  let ts = messagesEl.querySelector(".chat-timestamp");
+  if (!ts) {
+    ts = document.createElement("div");
     ts.className = "chat-timestamp";
     ts.id = "chatTimestamp";
-    ts.textContent = "Today 12:00 PM";
-    messagesEl.appendChild(ts);
+    messagesEl.insertBefore(ts, messagesEl.firstChild);
   }
+  const chatTime = currentId && chats[currentId] ? chats[currentId].created : null;
+  ts.textContent = formatChatTimestamp(chatTime || Date.now());
 
   const row = document.createElement("div");
   row.className = "msg-row " + (role === "user" ? "msg-user" : "msg-bot");
@@ -468,7 +508,7 @@ function appendBubble(role, text = "", typing = false, preRendered = false, atta
   }
 
   if (!typing && role === "assistant") {
-    attachBubbleActions(contentEl, text);
+    attachBubbleActions(contentEl, text, timestamp);
   }
 
   bubbleEl.appendChild(contentEl);
@@ -677,13 +717,24 @@ function updateSendButtonState() {
   const hasFiles = attachedFiles.length > 0;
   const canSend = hasText || hasFiles;
 
-  if (canSend) {
+  if (composerMicBtn) {
+    composerMicBtn.style.display = "flex";
+  }
+
+  if (streaming) {
     sendBtn.style.display = "flex";
-    sendBtn.disabled = streaming;
-    if (composerMicBtn) composerMicBtn.style.display = "none";
+    sendBtn.disabled = false;
+    sendBtn.classList.add("is-stopping");
+    sendBtn.title = "Stop responding";
+    sendBtn.setAttribute("aria-label", "Stop responding");
+    sendBtn.innerHTML = STOP_ICON_HTML;
   } else {
-    sendBtn.style.display = "none";
-    if (composerMicBtn) composerMicBtn.style.display = "flex";
+    sendBtn.style.display = "flex";
+    sendBtn.disabled = !canSend;
+    sendBtn.classList.remove("is-stopping");
+    sendBtn.title = "Send message (Ctrl+Enter)";
+    sendBtn.setAttribute("aria-label", "Send message");
+    sendBtn.innerHTML = SEND_ICON_HTML;
   }
 }
 
@@ -696,14 +747,15 @@ async function sendMessage(overrideContent) {
   }
 
   const chat = chats[currentId];
-  chat.messages.push({ role: "user", content, attachments: currentAttachments });
+  const userMsgTime = Date.now();
+  chat.messages.push({ role: "user", content, attachments: currentAttachments, time: userMsgTime });
   if (chat.messages.filter(m => m.role === "user").length === 1) {
     const initialTitle = content || (currentAttachments[0] ? currentAttachments[0].name : "Conversation");
     updateTitle(initialTitle);
   }
   saveChats();
 
-  appendBubble("user", content, false, false, currentAttachments);
+  appendBubble("user", content, false, false, currentAttachments, userMsgTime);
   inputBox.value = "";
   attachedFiles = [];
   renderAttachmentPreviews();
@@ -712,8 +764,9 @@ async function sendMessage(overrideContent) {
   charCount.textContent = "";
   inputBox.focus();
 
-  const { textEl: botTextEl, contentEl: botContent } = appendBubble("assistant", "", true);
-  const botMsg = { role: "assistant", content: "" };
+  const botMsgTime = Date.now();
+  const { textEl: botTextEl, contentEl: botContent } = appendBubble("assistant", "", true, false, [], botMsgTime);
+  const botMsg = { role: "assistant", content: "", time: botMsgTime };
   chat.messages.push(botMsg);
 
   setStreaming(true);
@@ -740,7 +793,9 @@ async function sendMessage(overrideContent) {
         model: getActiveModel(),
         temperature: 0.7,
         system: effectiveSys,
-        messages: userMessages
+        messages: userMessages,
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        clientTime: new Date().toISOString()
       }),
       signal: abort.signal
     });
@@ -782,11 +837,25 @@ async function sendMessage(overrideContent) {
     }
   } finally {
     if (botMsg.content) {
-      attachBubbleActions(botContent, botMsg.content);
+      if (botMsg.content.includes("[CLEAR_CHATS_CONFIRMED]")) {
+        botMsg.content = botMsg.content.replace("[CLEAR_CHATS_CONFIRMED]", "").trim();
+        botTextEl.innerHTML = renderMd(botMsg.content);
+        chats = {};
+        saveChats();
+        renderHistory();
+        newChat();
+        showToast("All previous chats have been cleared.");
+      } else {
+        botMsg.time = Date.now();
+        attachBubbleActions(botContent, botMsg.content, botMsg.time);
+        saveChats();
+        renderHistory();
+      }
+    } else {
+      saveChats();
+      renderHistory();
     }
-    saveChats();
     setStreaming(false);
-    renderHistory();
     requestAnimationFrame(() => inputBox.focus());
   }
 }
@@ -838,37 +907,6 @@ function closeModal(el) {
   setTimeout(() => el.hidden = true, 200);
 }
 
-const closeSettingsBtn = $("closeSettings");
-if (closeSettingsBtn) closeSettingsBtn.addEventListener("click", () => closeModal(settingsModal));
-const closeSettingsFooter = $("closeSettingsFooter");
-if (closeSettingsFooter) closeSettingsFooter.addEventListener("click", () => closeModal(settingsModal));
-
-const saveSettingsBtn = $("saveSettings");
-if (saveSettingsBtn) {
-  saveSettingsBtn.addEventListener("click", async () => {
-    sysPrompt = $("systemPromptInput").value.trim() || DEFAULT_SYS;
-    localStorage.setItem("nanu_sys", sysPrompt);
-
-    const openaiKey = $("openaiKeyInput").value.trim();
-    const geminiKey = $("geminiKeyInput").value.trim();
-    const model = $("modelSelect").value;
-    const payload = { defaultModel: model };
-    if (openaiKey) payload.openaiKey = openaiKey;
-    if (geminiKey) payload.geminiKey = geminiKey;
-
-    try {
-      await fetch("/api/settings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + userToken },
-        body: JSON.stringify(payload)
-      });
-    } catch {}
-
-    closeModal(settingsModal);
-    showToast("Settings & API keys saved! ✓");
-  });
-}
-
 // System Prompt Modal
 const closeSysPromptBtn = $("closeSysPrompt");
 if (closeSysPromptBtn) closeSysPromptBtn.addEventListener("click", () => closeModal(sysPromptModal));
@@ -886,40 +924,391 @@ if (saveSysPromptBtn) {
   });
 }
 
-// Profile Modal
+// Profile Modal (3-Step Change Password Wizard: Email -> OTP Verify/Resend -> Change Password)
+let verifiedProfileOtp = "";
+
+function resetProfileModal() {
+  const pStep1 = $("profileStep1");
+  const pStep2 = $("profileStep2");
+  const pStep3 = $("profileStep3");
+  const pEmail = $("profileEmailInput");
+  const pOtp = $("profileOtpInput");
+  const pNewPass = $("profileNewPassword");
+  const pConfirmPass = $("profileConfirmPassword");
+  const reqBtn = $("requestProfileOtpBtn");
+  const confirmOtpBtn = $("confirmProfileOtpBtn");
+  const resendBtn = $("resendProfileOtpBtn");
+  const saveBtn = $("saveProfileBtn");
+
+  if (pStep1) pStep1.style.display = "flex";
+  if (pStep2) pStep2.style.display = "none";
+  if (pStep3) pStep3.style.display = "none";
+
+  if (pEmail) pEmail.value = "";
+  if (pOtp) pOtp.value = "";
+  if (pNewPass) pNewPass.value = "";
+  if (pConfirmPass) pConfirmPass.value = "";
+
+  verifiedProfileOtp = "";
+
+  if (reqBtn) {
+    reqBtn.disabled = false;
+    reqBtn.textContent = "Verify";
+  }
+  if (confirmOtpBtn) {
+    confirmOtpBtn.disabled = false;
+    confirmOtpBtn.textContent = "Confirm OTP";
+  }
+  if (resendBtn) {
+    resendBtn.disabled = false;
+    resendBtn.textContent = "Resend OTP";
+  }
+  if (saveBtn) {
+    saveBtn.disabled = false;
+    saveBtn.textContent = "Change Password";
+  }
+}
+
+async function sendProfileOtp(btn) {
+  const emailInput = $("profileEmailInput");
+  const email = emailInput ? emailInput.value.trim() : "";
+  if (!email || !email.includes("@")) {
+    return showToast("Please type your registered email address.", "error");
+  }
+
+  const isResend = btn && btn.id === "resendProfileOtpBtn";
+  const originalText = btn ? btn.textContent : (isResend ? "Resend OTP" : "Verify");
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = isResend ? "Resending OTP..." : "Verifying & Sending OTP...";
+  }
+
+  try {
+    const res = await fetch("/api/auth/send-profile-otp", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Bearer " + userToken
+      },
+      body: JSON.stringify({ email })
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok) {
+      const pStep1 = $("profileStep1");
+      const pStep2 = $("profileStep2");
+      const pStep3 = $("profileStep3");
+      const notice = $("profileOtpNotice");
+      const pOtp = $("profileOtpInput");
+
+      const successMsg = isResend
+        ? `✓ Fresh 6-digit OTP resent to ${email}! Please check your inbox.`
+        : `✓ 6-digit OTP sent to ${email}! Please check your inbox.`;
+      showToast(successMsg);
+
+      if (notice) {
+        notice.style.background = "rgba(22, 163, 74, 0.1)";
+        notice.style.borderColor = "rgba(22, 163, 74, 0.2)";
+        notice.style.color = "#16a34a";
+        notice.textContent = data.message || `✓ 6-digit verification OTP sent to ${email}! Please check your email inbox and spam folder.`;
+      }
+
+      if (pStep1) pStep1.style.display = "none";
+      if (pStep2) pStep2.style.display = "flex";
+      if (pStep3) pStep3.style.display = "none";
+
+      if (pOtp) {
+        pOtp.value = ""; // Strictly empty: user must check their email inbox
+        pOtp.focus();
+      }
+    } else {
+      showToast(data.error || "Failed to send OTP code.", "error");
+    }
+  } catch {
+    showToast("Error sending OTP request.", "error");
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = originalText;
+    }
+  }
+}
+
 const closeProfile = $("closeProfile");
-const saveProfileBtn = $("saveProfileBtn");
-if (closeProfile) closeProfile.addEventListener("click", () => closeModal(profileModal));
-if (saveProfileBtn) {
-  saveProfileBtn.addEventListener("click", async () => {
-    const newPassword = $("profileNewPassword").value;
-    if (!newPassword || newPassword.length < 6) return showToast("Password must be at least 6 characters.");
-    saveProfileBtn.textContent = "Saving...";
+if (closeProfile) {
+  closeProfile.addEventListener("click", () => {
+    resetProfileModal();
+    closeModal(profileModal);
+  });
+}
+
+const closeProfileFooter = $("closeProfileFooter");
+if (closeProfileFooter) {
+  closeProfileFooter.addEventListener("click", () => {
+    resetProfileModal();
+    closeModal(profileModal);
+  });
+}
+
+// Step 1: Verify button sends 6-digit OTP to the typed registered email
+const requestProfileOtpBtn = $("requestProfileOtpBtn");
+if (requestProfileOtpBtn) {
+  requestProfileOtpBtn.addEventListener("click", () => sendProfileOtp(requestProfileOtpBtn));
+}
+
+// Step 2: Resend OTP button if user didn't receive the OTP
+const resendProfileOtpBtn = $("resendProfileOtpBtn");
+if (resendProfileOtpBtn) {
+  resendProfileOtpBtn.addEventListener("click", () => sendProfileOtp(resendProfileOtpBtn));
+}
+
+// Step 2: Option to change registered email and go back to Step 1
+const changeEmailProfileBtn = $("changeEmailProfileBtn");
+if (changeEmailProfileBtn) {
+  changeEmailProfileBtn.addEventListener("click", () => {
+    const pStep1 = $("profileStep1");
+    const pStep2 = $("profileStep2");
+    const pStep3 = $("profileStep3");
+    if (pStep1) pStep1.style.display = "flex";
+    if (pStep2) pStep2.style.display = "none";
+    if (pStep3) pStep3.style.display = "none";
+    const emailInput = $("profileEmailInput");
+    if (emailInput) emailInput.focus();
+  });
+}
+
+// Step 2: Confirm OTP button verifies the typed OTP and unlocks Step 3
+const confirmProfileOtpBtn = $("confirmProfileOtpBtn");
+if (confirmProfileOtpBtn) {
+  confirmProfileOtpBtn.addEventListener("click", async () => {
+    const email = $("profileEmailInput") ? $("profileEmailInput").value.trim() : "";
+    const otp = $("profileOtpInput") ? $("profileOtpInput").value.trim() : "";
+
+    if (!email || !email.includes("@")) {
+      return showToast("Please provide your registered email address.", "error");
+    }
+    if (!otp || otp.length !== 6) {
+      return showToast("Please enter the complete 6-digit OTP verification code.", "error");
+    }
+
+    confirmProfileOtpBtn.disabled = true;
+    confirmProfileOtpBtn.textContent = "Confirming OTP...";
+
     try {
-      const res = await fetch("/api/auth/update-profile", {
+      const res = await fetch("/api/auth/verify-profile-otp", {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": "Bearer " + userToken },
-        body: JSON.stringify({ newPassword })
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + userToken
+        },
+        body: JSON.stringify({ email, otp })
       });
+      const data = await res.json().catch(() => ({}));
       if (res.ok) {
-        showToast("Password updated!");
-        $("profileNewPassword").value = "";
-        closeModal(profileModal);
+        verifiedProfileOtp = otp;
+        showToast("✓ OTP verified successfully! Please enter your new password.");
+
+        const pStep1 = $("profileStep1");
+        const pStep2 = $("profileStep2");
+        const pStep3 = $("profileStep3");
+
+        if (pStep1) pStep1.style.display = "none";
+        if (pStep2) pStep2.style.display = "none";
+        if (pStep3) pStep3.style.display = "flex";
+
+        const pPass = $("profileNewPassword");
+        const pConfirm = $("profileConfirmPassword");
+        if (pPass) {
+          pPass.value = "";
+          pPass.focus();
+        }
+        if (pConfirm) pConfirm.value = "";
       } else {
-        showToast("Failed to update password.");
+        showToast(data.error || "Invalid or expired OTP code.", "error");
       }
     } catch {
-      showToast("Error updating password.");
+      showToast("Network error verifying OTP code.", "error");
     } finally {
-      saveProfileBtn.textContent = "Save Changes";
+      confirmProfileOtpBtn.disabled = false;
+      confirmProfileOtpBtn.textContent = "Confirm OTP";
     }
   });
 }
 
-[settingsModal, sysPromptModal, profileModal].forEach(modal => {
+// Step 3: Change Password button updates user password after OTP confirmation
+const saveProfileBtn = $("saveProfileBtn");
+if (saveProfileBtn) {
+  saveProfileBtn.addEventListener("click", async () => {
+    const email = $("profileEmailInput") ? $("profileEmailInput").value.trim() : "";
+    const otp = verifiedProfileOtp || ($("profileOtpInput") ? $("profileOtpInput").value.trim() : "");
+    const newPassword = $("profileNewPassword") ? $("profileNewPassword").value : "";
+    const confirmPassword = $("profileConfirmPassword") ? $("profileConfirmPassword").value : "";
+
+    if (!email || !email.includes("@")) {
+      return showToast("Registered email address is required.", "error");
+    }
+    if (!otp || otp.length !== 6) {
+      return showToast("OTP verification is required first.", "error");
+    }
+    if (!newPassword || newPassword.length < 6) {
+      return showToast("New password must be at least 6 characters.", "error");
+    }
+    if (newPassword !== confirmPassword) {
+      return showToast("Passwords do not match. Please re-enter matching passwords.", "error");
+    }
+
+    saveProfileBtn.disabled = true;
+    saveProfileBtn.textContent = "Changing Password...";
+    try {
+      const res = await fetch("/api/auth/update-profile", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer " + userToken
+        },
+        body: JSON.stringify({ email, otp, newPassword })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        showToast("✓ Password successfully updated!");
+        resetProfileModal();
+        closeModal(profileModal);
+      } else {
+        showToast(data.error || "Failed to update password. Invalid or expired OTP.", "error");
+      }
+    } catch {
+      showToast("Network error updating password.", "error");
+    } finally {
+      saveProfileBtn.disabled = false;
+      saveProfileBtn.textContent = "Change Password";
+    }
+  });
+}
+
+// Keyboard shortcuts for smoother UX
+const profileEmailInput = $("profileEmailInput");
+if (profileEmailInput) {
+  profileEmailInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (requestProfileOtpBtn) requestProfileOtpBtn.click();
+    }
+  });
+}
+
+const profileOtpInput = $("profileOtpInput");
+if (profileOtpInput) {
+  profileOtpInput.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (confirmProfileOtpBtn) confirmProfileOtpBtn.click();
+    }
+  });
+}
+
+const profileNewPassword = $("profileNewPassword");
+if (profileNewPassword) {
+  profileNewPassword.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const pConfirm = $("profileConfirmPassword");
+      if (pConfirm) pConfirm.focus();
+    }
+  });
+}
+
+const profileConfirmPassword = $("profileConfirmPassword");
+if (profileConfirmPassword) {
+  profileConfirmPassword.addEventListener("keydown", e => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (saveProfileBtn) saveProfileBtn.click();
+    }
+  });
+}
+
+const clearChatsModal = $("clearChatsModal");
+const clearConfirmInput = $("clearConfirmInput");
+const clearConfirmError = $("clearConfirmError");
+const confirmClearBtn = $("confirmClearBtn");
+const cancelClearBtn = $("cancelClearBtn");
+const closeClearChats = $("closeClearChats");
+
+function resetClearChatsModal() {
+  if (clearConfirmInput) clearConfirmInput.value = "";
+  if (clearConfirmError) clearConfirmError.style.display = "none";
+  if (confirmClearBtn) {
+    confirmClearBtn.disabled = true;
+    confirmClearBtn.style.opacity = "0.5";
+    confirmClearBtn.style.cursor = "not-allowed";
+  }
+}
+
+function executeClearAllChats() {
+  const val = clearConfirmInput ? clearConfirmInput.value.trim().toLowerCase() : "";
+  if (val !== "confirm") {
+    if (clearConfirmError) clearConfirmError.style.display = "block";
+    return;
+  }
+  chats = {};
+  saveChats();
+  renderHistory();
+  newChat();
+  resetClearChatsModal();
+  closeModal(clearChatsModal);
+  showToast("All previous chats have been cleared.");
+}
+
+if (clearConfirmInput) {
+  clearConfirmInput.addEventListener("input", () => {
+    const isConfirmed = clearConfirmInput.value.trim().toLowerCase() === "confirm";
+    if (confirmClearBtn) {
+      confirmClearBtn.disabled = !isConfirmed;
+      confirmClearBtn.style.opacity = isConfirmed ? "1" : "0.5";
+      confirmClearBtn.style.cursor = isConfirmed ? "pointer" : "not-allowed";
+    }
+    if (clearConfirmError && isConfirmed) {
+      clearConfirmError.style.display = "none";
+    }
+  });
+
+  clearConfirmInput.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      const isConfirmed = clearConfirmInput.value.trim().toLowerCase() === "confirm";
+      if (isConfirmed) {
+        executeClearAllChats();
+      } else {
+        if (clearConfirmError) clearConfirmError.style.display = "block";
+      }
+    }
+  });
+}
+
+if (confirmClearBtn) {
+  confirmClearBtn.addEventListener("click", executeClearAllChats);
+}
+
+if (cancelClearBtn) {
+  cancelClearBtn.addEventListener("click", () => {
+    resetClearChatsModal();
+    closeModal(clearChatsModal);
+  });
+}
+
+if (closeClearChats) {
+  closeClearChats.addEventListener("click", () => {
+    resetClearChatsModal();
+    closeModal(clearChatsModal);
+  });
+}
+
+[sysPromptModal, profileModal, clearChatsModal].forEach(modal => {
   if (!modal) return;
   modal.addEventListener("click", e => {
-    if (e.target === modal) closeModal(modal);
+    if (e.target === modal) {
+      if (modal === clearChatsModal) resetClearChatsModal();
+      if (modal === profileModal) resetProfileModal();
+      closeModal(modal);
+    }
   });
 });
 
@@ -927,17 +1316,34 @@ if (saveProfileBtn) {
 sendBtn.addEventListener("mousedown", e => e.preventDefault());
 sendBtn.addEventListener("click", e => {
   e.preventDefault();
+  if (streaming) {
+    if (abort) abort.abort();
+    setStreaming(false);
+    showToast("Stopped.", "info");
+    return;
+  }
   if (inputBox.value.trim().length === 0 && attachedFiles.length === 0) return;
   sendMessage();
   inputBox.focus();
 });
 
 inputBox.addEventListener("keydown", e => {
-  if (e.key === "Enter" && !e.shiftKey) {
-    e.preventDefault();
-    if (inputBox.value.trim().length > 0 || attachedFiles.length > 0) {
-      sendMessage();
-      inputBox.focus();
+  if (e.key === "Enter") {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      if (streaming) {
+        if (abort) abort.abort();
+        setStreaming(false);
+        showToast("Stopped.", "info");
+        return;
+      }
+      if (inputBox.value.trim().length > 0 || attachedFiles.length > 0) {
+        sendMessage();
+        inputBox.focus();
+      }
+    } else {
+      // Plain Enter goes to the next line (browser default inserts newline)
+      requestAnimationFrame(() => autoGrow());
     }
   }
 });
@@ -949,23 +1355,20 @@ inputBox.addEventListener("input", () => {
   charCount.textContent = len > 0 ? len + "/8000" : "";
 });
 
-stopBtn.addEventListener("click", () => {
-  if (abort) abort.abort();
-  setStreaming(false);
-  showToast("Stopped.", "info");
-});
+if (stopBtn) {
+  stopBtn.addEventListener("click", () => {
+    if (abort) abort.abort();
+    setStreaming(false);
+    showToast("Stopped.", "info");
+  });
+}
 
 newChatBtn.addEventListener("click", () => {
   newChat();
   inputBox.focus();
 });
 
-if (topbarNewChat) {
-  topbarNewChat.addEventListener("click", () => {
-    newChat();
-    inputBox.focus();
-  });
-}
+
 
 // Theme handling
 let currentTheme = localStorage.getItem("nanu_theme") || "light";
@@ -1217,24 +1620,7 @@ if (shareChatBtn) {
   });
 }
 
-// Settings buttons
-if (settingsTrigger) {
-  settingsTrigger.addEventListener("click", async () => {
-    $("systemPromptInput").value = sysPrompt;
-    try {
-      const res = await fetch("/api/config", { headers: { "Authorization": "Bearer " + userToken } });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.defaultModel && $("modelSelect")) {
-          $("modelSelect").value = data.defaultModel;
-        }
-        if (data.hasOpenRouter && !$("openaiKeyInput").value) $("openaiKeyInput").placeholder = "✓ OpenRouter Key Configured (.env)";
-        if (data.hasGemini && !$("geminiKeyInput").value) $("geminiKeyInput").placeholder = "✓ Gemini Key Configured (.env)";
-      }
-    } catch {}
-    openModal(settingsModal);
-  });
-}
+
 
 // Profile Menu
 if (profileWidget && profileMenu) {
@@ -1249,13 +1635,6 @@ if (profileWidget && profileMenu) {
   });
 }
 
-if (settingsTriggerMenu) {
-  settingsTriggerMenu.addEventListener("click", () => {
-    profileMenu.hidden = true;
-    if (settingsTrigger) settingsTrigger.click();
-  });
-}
-
 if (sysPromptMenu) {
   sysPromptMenu.addEventListener("click", () => {
     profileMenu.hidden = true;
@@ -1267,19 +1646,23 @@ if (sysPromptMenu) {
 if (profileEditMenu) {
   profileEditMenu.addEventListener("click", () => {
     profileMenu.hidden = true;
+    resetProfileModal();
     openModal(profileModal);
+    setTimeout(() => {
+      const emailInput = $("profileEmailInput");
+      if (emailInput) emailInput.focus();
+    }, 100);
   });
 }
 
 if (clearAllMenu) {
   clearAllMenu.addEventListener("click", () => {
     profileMenu.hidden = true;
-    if (confirm("Delete all chat conversations? This cannot be undone.")) {
-      chats = {};
-      saveChats();
-      newChat();
-      showToast("All chats deleted.");
-    }
+    resetClearChatsModal();
+    openModal(clearChatsModal);
+    setTimeout(() => {
+      if (clearConfirmInput) clearConfirmInput.focus();
+    }, 100);
   });
 }
 
@@ -1309,9 +1692,11 @@ document.addEventListener("keydown", e => {
   }
   if (e.key === "Escape") {
     if (streaming && abort) { abort.abort(); setStreaming(false); }
-    closeModal(settingsModal);
     closeModal(sysPromptModal);
+    resetProfileModal();
     closeModal(profileModal);
+    resetClearChatsModal();
+    closeModal(clearChatsModal);
   }
 });
 
@@ -1324,6 +1709,11 @@ document.addEventListener("keydown", e => {
     loadChat(lastId);
   } else {
     newChat();
+  }
+  const initTsEl = $("chatTimestamp");
+  if (initTsEl) {
+    const activeChat = currentId && chats[currentId] ? chats[currentId] : null;
+    initTsEl.textContent = formatChatTimestamp(activeChat ? activeChat.created : new Date());
   }
   inputBox.focus();
   updateSendButtonState();
@@ -1350,6 +1740,20 @@ document.addEventListener("keydown", e => {
         } else if ($("modelSelect")) {
           $("modelSelect").value = localStorage.getItem("nanu_model");
         }
+      }
+    })
+    .catch(() => {});
+
+  // Load current user profile info
+  fetch("/api/auth/me", { headers: { "Authorization": "Bearer " + userToken } })
+    .then(r => r.ok ? r.json() : null)
+    .then(data => {
+      if (data && data.email) {
+        window.userEmail = data.email;
+        const profileEmailInput = $("profileEmailInput");
+        if (profileEmailInput) profileEmailInput.value = "";
+        const profileName = document.querySelector(".profile-name");
+        if (profileName) profileName.textContent = data.email.split("@")[0];
       }
     })
     .catch(() => {});

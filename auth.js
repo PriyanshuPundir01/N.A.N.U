@@ -1,11 +1,11 @@
 function switchView(viewName) {
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   document.getElementById('view-' + viewName).classList.add('active');
-  
+
   // Clear all errors and inputs on switch
   document.querySelectorAll('.error-msg, .success-msg').forEach(el => el.textContent = '');
   document.querySelectorAll('form').forEach(f => f.reset());
-  
+
   if (viewName === 'forgot') {
     document.getElementById('forgotForm').style.display = 'flex';
     document.getElementById('verifyForm').style.display = 'none';
@@ -29,7 +29,7 @@ document.getElementById('loginForm').addEventListener('submit', async (e) => {
   const err = document.getElementById('login-error');
   err.textContent = '';
   btn.textContent = 'Logging in...';
-  
+
   try {
     const data = await apiCall('/api/auth/login', {
       email: document.getElementById('login-email').value,
@@ -49,7 +49,7 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
   const err = document.getElementById('reg-error');
   err.textContent = '';
   btn.textContent = 'Signing up...';
-  
+
   try {
     const data = await apiCall('/api/auth/register', {
       email: document.getElementById('reg-email').value,
@@ -73,11 +73,18 @@ document.getElementById('forgotForm').addEventListener('submit', async (e) => {
   err.textContent = '';
   succ.textContent = '';
   btn.textContent = 'Sending...';
-  
+
   try {
-    resetEmail = document.getElementById('forgot-email').value;
-    await apiCall('/api/auth/forgot-password', { email: resetEmail });
-    succ.textContent = 'OTP sent! (Check server console)';
+    resetEmail = document.getElementById('forgot-email').value.trim();
+    const data = await apiCall('/api/auth/forgot-password', { email: resetEmail });
+    succ.textContent = data.message || ('✓ 6-digit verification code sent to ' + resetEmail + '! Please check your inbox and spam folder.');
+    succ.style.color = '#51cf66';
+
+    const otpInput = document.getElementById('verify-otp');
+    if (otpInput) {
+      otpInput.value = ''; // Strictly empty: user must check their email inbox
+      otpInput.focus();
+    }
     document.getElementById('forgotForm').style.display = 'none';
     document.getElementById('verifyForm').style.display = 'flex';
   } catch (error) {
@@ -93,7 +100,7 @@ document.getElementById('verifyForm').addEventListener('submit', async (e) => {
   const err = document.getElementById('forgot-error');
   err.textContent = '';
   btn.textContent = 'Verifying...';
-  
+
   try {
     const data = await apiCall('/api/auth/reset-password', {
       email: resetEmail,
