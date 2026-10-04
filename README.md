@@ -1,4 +1,4 @@
-# NANU — Your AI Assistant ⚡
+# N.A.N.U — Your AI Assistant ⚡
 
 A fast, modern, and intelligent AI chat application with real-time streaming, speech-to-text dictation, multimodal file/image attachments, deep thinking mode, and easy switching between 100% free AI models.
 

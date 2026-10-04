@@ -96,7 +96,7 @@ async function sendEmailOtp(toEmail, otp) {
     return {
       sent: false,
       notConfigured: true,
-      error: "Live email dispatch is not configured. Please add your Gmail address and 16-character Gmail App Password in Settings (⚙️) or in your .env file (EMAIL_USER & EMAIL_PASS) so NANU can deliver OTPs directly to your inbox."
+      error: "Live email dispatch is not configured. Please add your Gmail address and 16-character Gmail App Password in Settings (⚙️) or in your .env file (EMAIL_USER & EMAIL_PASS) so N.A.N.U can deliver OTPs directly to your inbox."
     };
   }
 
@@ -115,14 +115,14 @@ async function sendEmailOtp(toEmail, otp) {
     });
 
     const info = await transporter.sendMail({
-      from: `"NANU AI" <${config.emailUser}>`,
+      from: `"N.A.N.U AI" <${config.emailUser}>`,
       to: toEmail,
-      subject: `Your NANU Verification Code: ${otp}`,
-      text: `Your NANU verification code is: ${otp}. It will expire in 10 minutes.`,
+      subject: `Your N.A.N.U Verification Code: ${otp}`,
+      text: `Your N.A.N.U verification code is: ${otp}. It will expire in 10 minutes.`,
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0b0f19; color: #f1f5f9; padding: 40px 20px; text-align: center;">
           <div style="max-width: 480px; margin: 0 auto; background: #131b2e; border: 1px solid #1e293b; border-radius: 16px; padding: 32px; box-shadow: 0 10px 40px rgba(0,0,0,0.5);">
-            <div style="font-size: 26px; font-weight: 800; color: #38bdf8; margin-bottom: 6px;">⚡ NANU AI</div>
+            <div style="font-size: 26px; font-weight: 800; color: #38bdf8; margin-bottom: 6px;">⚡ N.A.N.U AI</div>
             <h2 style="font-size: 20px; font-weight: 600; color: #fff; margin: 0 0 14px;">Verification Code</h2>
             <p style="font-size: 14px; color: #94a3b8; line-height: 1.5; margin-bottom: 20px;">Use the 6-digit verification code below to verify your email. This code will expire in 10 minutes.</p>
             <div style="background: rgba(56, 189, 248, 0.1); border: 2px dashed #0284c7; border-radius: 12px; padding: 16px; font-size: 32px; font-weight: 800; letter-spacing: 8px; color: #38bdf8; display: inline-block; margin-bottom: 20px;">
@@ -337,9 +337,9 @@ app.post("/api/settings", verify, (req, res) => {
 app.get("/api/models", verify, (_req, res) => {
   res.json({
     models: [
-      { id: "gemini-flash-lite-latest", name: "NANU Flash — Fastest & Free", provider: "gemini", isFree: true, recommended: true },
-      { id: "gemini-2.0-flash", name: "NANU Pro — Deep Reasoning & Free", provider: "gemini", isFree: true },
-      { id: "nanu-smart", name: "NANU Smart — Offline Engine", provider: "local", isFree: true }
+      { id: "gemini-flash-lite-latest", name: "N.A.N.U Flash — Fastest & Free", provider: "gemini", isFree: true, recommended: true },
+      { id: "gemini-2.0-flash", name: "N.A.N.U Pro — Deep Reasoning & Free", provider: "gemini", isFree: true },
+      { id: "nanu-smart", name: "N.A.N.U Smart — Offline Engine", provider: "local", isFree: true }
     ]
   });
 });
@@ -621,12 +621,12 @@ async function callOpenRouter(messages, model, customKey, res) {
     "https://openrouter.ai/api/v1", res,
     {
       "HTTP-Referer": "http://localhost:3000",
-      "X-Title": "NANU AI Assistant"
+      "X-Title": "N.A.N.U AI Assistant"
     }
   );
 }
 
-// NANU Smart — Comprehensive Local AI Engine (No API required)
+// N.A.N.U Smart — Comprehensive Local AI Engine (No API required)
 async function streamFallback(prompt, res, notice = "", clientTimeInfo = null) {
   if (notice) {
     res.write(notice + "\n\n");
@@ -671,12 +671,12 @@ async function streamFallback(prompt, res, notice = "", clientTimeInfo = null) {
 
     // Greetings
     if (/^(hi|hello|hey|howdy|sup|yo|hiya|good (morning|afternoon|evening)|namaste)[!?\s]*$/i.test(p.trim())) {
-      return `# Hey there! 👋\n\nI'm **NANU**, your intelligent AI assistant running in **Offline Mode**.\n\nI can help with:\n- 💻 **Algorithms** — sorting, searching, data structures\n- 🐍 **Python / JS / TS** — code examples and explanations\n- ⚛️ **React / Node.js** — components, hooks, APIs\n- 🗄️ **SQL** — queries, joins, schema design\n- 🐙 **Git / Docker / Linux** — commands and workflows\n- 🤖 **AI/ML** — concepts, architectures, use cases\n\nWhat would you like to explore?`;
+      return `# Hey there! 👋\n\nI'm **N.A.N.U**, your intelligent AI assistant running in **Offline Mode**.\n\nI can help with:\n- 💻 **Algorithms** — sorting, searching, data structures\n- 🐍 **Python / JS / TS** — code examples and explanations\n- ⚛️ **React / Node.js** — components, hooks, APIs\n- 🗄️ **SQL** — queries, joins, schema design\n- 🐙 **Git / Docker / Linux** — commands and workflows\n- 🤖 **AI/ML** — concepts, architectures, use cases\n\nWhat would you like to explore?`;
     }
 
     // Identity
     if (/who are you|what are you|what is nanu|introduce yourself|tell me about yourself/i.test(lower)) {
-      return `# I'm N.A.N.U 🤖\n\n**NANU** stands for **Neural Adaptive Network Utility** — a fast, intelligent AI assistant built to help with coding, learning, and problem-solving.\n\n### Capabilities\n| Area | Details |\n|:---|:---|\n| 💻 Code | Write, debug, review any language |\n| 📖 Explain | Break down complex topics simply |\n| 🧮 Math | Equations, algorithms, proofs |\n| 🌐 Web Dev | HTML, CSS, JS, React, Node.js |\n| 🗄️ Databases | SQL, NoSQL, schema design |\n| 🐧 DevOps | Git, Docker, Linux, CI/CD |\n\n> Currently running in **Offline Mode** — no internet, no API key needed!`;
+      return `# I'm N.A.N.U 🤖\n\n**N.A.N.U** stands for **Neural Adaptive Network Utility** — a fast, intelligent AI assistant built to help with coding, learning, and problem-solving.\n\n### Capabilities\n| Area | Details |\n|:---|:---|\n| 💻 Code | Write, debug, review any language |\n| 📖 Explain | Break down complex topics simply |\n| 🧮 Math | Equations, algorithms, proofs |\n| 🌐 Web Dev | HTML, CSS, JS, React, Node.js |\n| 🗄️ Databases | SQL, NoSQL, schema design |\n| 🐧 DevOps | Git, Docker, Linux, CI/CD |\n\n> Currently running in **Offline Mode** — no internet, no API key needed!`;
     }
 
     // How are you
@@ -771,12 +771,12 @@ async function streamFallback(prompt, res, notice = "", clientTimeInfo = null) {
 
     // What can you do
     if (lower.includes("what can you do") || lower.includes("help me") || lower.includes("how do you work") || lower.includes("capabilities")) {
-      return `## What NANU Can Do 🧠\n\n### 💻 Offline Mode (NANU Smart — active now)\nBuilt-in knowledge for:\n- Algorithms: sorting, searching, trees, graphs\n- Python, JavaScript, TypeScript\n- React, Node.js, Express\n- SQL, Git, Docker, Linux\n- AI/ML concepts\n\n### 🌐 Online Mode (Switch to NANU Flash)\n- Answer ANY question with live AI\n- Analyze images, PDFs, voice notes\n- Deep reasoning with Gemini 2.5 Flash`;
+      return `## What N.A.N.U Can Do 🧠\n\n### 💻 Offline Mode (N.A.N.U Smart — active now)\nBuilt-in knowledge for:\n- Algorithms: sorting, searching, trees, graphs\n- Python, JavaScript, TypeScript\n- React, Node.js, Express\n- SQL, Git, Docker, Linux\n- AI/ML concepts\n\n### 🌐 Online Mode (Switch to N.A.N.U Flash)\n- Answer ANY question with live AI\n- Analyze images, PDFs, voice notes\n- Deep reasoning with Gemini 2.5 Flash`;
     }
 
     // Generic intelligent fallback
     const topic = p.length > 70 ? p.slice(0, 67) + "..." : p;
-    return `## Let me help! 💡\n\nYou asked: *"${topic}"*\n\nI'm **NANU Smart** in **Offline Mode**. I have built-in knowledge for:\n\n| Topic | Try asking... |\n|:---|:---|\n| 💻 Algorithms | "merge sort", "binary search" |\n| 🐍 Python / JS | "Python classes", "async await" |\n| ⚛️ React | "useState example", "useEffect" |\n| 🗄️ SQL | "SQL joins", "write a query" |\n| 🐙 Git | "git commands", "how to branch" |\n| 🐳 Docker | "Dockerfile example" |\n| 🐧 Linux | "linux commands cheatsheet" |\n| 🤖 AI/ML | "machine learning basics" |\n\n> 💡 Switch to **⚡ NANU Flash** for full AI answers on any topic!`;
+    return `## Let me help! 💡\n\nYou asked: *"${topic}"*\n\nI'm **N.A.N.U Smart** in **Offline Mode**. I have built-in knowledge for:\n\n| Topic | Try asking... |\n|:---|:---|\n| 💻 Algorithms | "merge sort", "binary search" |\n| 🐍 Python / JS | "Python classes", "async await" |\n| ⚛️ React | "useState example", "useEffect" |\n| 🗄️ SQL | "SQL joins", "write a query" |\n| 🐙 Git | "git commands", "how to branch" |\n| 🐳 Docker | "Dockerfile example" |\n| 🐧 Linux | "linux commands cheatsheet" |\n| 🤖 AI/ML | "machine learning basics" |\n\n> 💡 Switch to **⚡ N.A.N.U Flash** for full AI answers on any topic!`;
   }
 
   const answer = pickAnswer();
@@ -987,7 +987,7 @@ app.post("/api/chat", verify, async (req, res) => {
     day: "numeric"
   });
 
-  const baseSys = system || "You are NANU, a fast, intelligent, helpful AI assistant. Format code in markdown.";
+  const baseSys = system || "You are N.A.N.U, a fast, intelligent, helpful AI assistant. Format code in markdown.";
   const temporalInstruction = `\n\n[Real-Time System Context: Today is ${formattedDate}. The current local time is ${formattedTime} (${userTimeZone}). When asked about the current time, date, day of the week, month, or year, always answer accurately and concisely based on this information.]\n\n[Security Policy - Password Changes: Password changes strictly require 6-digit OTP verification. When a user asks to change or reset their password, ALWAYS first ask them to type their registered email address. Once they provide their registered email, a random 6-digit OTP is sent to that email, and they must verify the 6-digit OTP code before updating their password.]\n\n[Chat History Policy - Clearing Chats: When a user asks to clear or delete previous chats or conversation history, ALWAYS ask them to type "confirm" before permanently deleting previous chats.]`;
   const systemContent = baseSys + temporalInstruction;
 
@@ -1048,7 +1048,7 @@ app.post("/api/chat", verify, async (req, res) => {
           return;
         } catch (orErr) {}
       }
-      await streamFallback(lastUserMsg, res, `> ⚠️ *Live AI is currently busy. Answered via NANU engine:*`, clientTimeInfo);
+      await streamFallback(lastUserMsg, res, `> ⚠️ *Live AI is currently busy. Answered via N.A.N.U engine:*`, clientTimeInfo);
       res.end();
       return;
     }
@@ -1070,7 +1070,7 @@ app.post("/api/chat", verify, async (req, res) => {
           return;
         } catch (gErr) {}
       }
-      await streamFallback(lastUserMsg, res, `> ⚠️ *Rate limit reached. Answered via NANU engine:*`, clientTimeInfo);
+      await streamFallback(lastUserMsg, res, `> ⚠️ *Rate limit reached. Answered via N.A.N.U engine:*`, clientTimeInfo);
       res.end();
       return;
     }
@@ -1099,7 +1099,7 @@ async function callOpenOpenAIWithFallback(finalMessages, model, temperature, api
       
       if (config.geminiKey) {
         try {
-          res.write("> ℹ️ *Note: Your OpenAI key has 0 prepaid credits remaining. NANU answered via Google Gemini:* \n\n");
+          res.write("> ℹ️ *Note: Your OpenAI key has 0 prepaid credits remaining. N.A.N.U answered via Google Gemini:* \n\n");
           await callGemini(finalMessages, "gemini-flash-lite-latest", null, res);
           res.end();
           return;
@@ -1110,7 +1110,7 @@ async function callOpenOpenAIWithFallback(finalMessages, model, temperature, api
 
       if (config.openrouterKey) {
         try {
-          res.write("> ℹ️ *Note: Your OpenAI key has 0 prepaid credits remaining. NANU answered via OpenRouter AI:* \n\n");
+          res.write("> ℹ️ *Note: Your OpenAI key has 0 prepaid credits remaining. N.A.N.U answered via OpenRouter AI:* \n\n");
           await callOpenRouter(finalMessages, "qwen/qwen3.8-27b:free", null, res);
           res.end();
           return;

@@ -4,7 +4,7 @@ if (!userToken) {
 }
 
 const PROXY_URL = (window.location.origin.startsWith("http")) ? "/api/chat" : "http://localhost:3000/api/chat";
-const DEFAULT_SYS = "You are NANU, a concise, helpful, and intelligent AI assistant. Think step by step when needed. Avoid unnecessary repetition. Format code cleanly in markdown.";
+const DEFAULT_SYS = "You are N.A.N.U, a concise, helpful, and intelligent AI assistant. Think step by step when needed. Avoid unnecessary repetition. Format code cleanly in markdown.";
 
 let sysPrompt = localStorage.getItem("nanu_sys") || DEFAULT_SYS;
 let isThinkingEnabled = false;
@@ -1491,9 +1491,9 @@ if (composerMicBtn) {
 // Search Bar Model Switcher & Selection
 // -------------------------------------------------------------
 const MODEL_DISPLAY_INFO = {
-  "gemini-flash-lite-latest": { name: "NANU Flash", fullName: "NANU Flash", icon: "⚡" },
-  "gemini-2.0-flash": { name: "NANU Pro", fullName: "NANU Pro (Reasoning)", icon: "🧠" },
-  "nanu-smart": { name: "NANU Smart", fullName: "NANU Smart (Offline)", icon: "💻" }
+  "gemini-flash-lite-latest": { name: "N.A.N.U Flash", fullName: "N.A.N.U Flash", icon: "⚡" },
+  "gemini-2.0-flash": { name: "N.A.N.U Pro", fullName: "N.A.N.U Pro (Reasoning)", icon: "🧠" },
+  "nanu-smart": { name: "N.A.N.U Smart", fullName: "N.A.N.U Smart (Offline)", icon: "💻" }
 };
 
 function getActiveModel() {
@@ -1607,7 +1607,7 @@ if (shareChatBtn) {
     if (chat && chat.messages) {
       const text = chat.messages
         .filter(m => m.role !== "system")
-        .map(m => (m.role === "user" ? "You: " : "NANU: ") + m.content)
+        .map(m => (m.role === "user" ? "You: " : "N.A.N.U: ") + m.content)
         .join("\n\n");
       navigator.clipboard.writeText(text).then(() => {
         showToast("Chat conversation copied to clipboard! 🔗");
