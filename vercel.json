@@ -3,7 +3,17 @@
   "builds": [
     {
       "src": "index.js",
-      "use": "@vercel/node"
+      "use": "@vercel/node",
+      "config": {
+        "includeFiles": [
+          "index.html",
+          "auth.html",
+          "style.css",
+          "client.js",
+          "auth.js",
+          "users.json"
+        ]
+      }
     }
   ],
   "routes": [
@@ -17,10 +27,7 @@
     },
     {
       "src": "/auth",
-      "dest": "/auth.html"
-    },
-    {
-      "handle": "filesystem"
+      "dest": "/index.js"
     },
     {
       "src": "/(.*)",
@@ -28,4 +35,3 @@
     }
   ]
 }
-

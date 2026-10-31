@@ -189,6 +189,19 @@ app.use(express.static(__dirname, {
   }
 }));
 
+// Explicit web page routes
+app.get("/", (_req, res) => {
+  const indexFile = path.join(__dirname, "index.html");
+  if (fs.existsSync(indexFile)) return res.sendFile(indexFile);
+  res.send("<h1>N.A.N.U AI</h1><p>Online.</p>");
+});
+
+app.get("/auth", (_req, res) => {
+  const authFile = path.join(__dirname, "auth.html");
+  if (fs.existsSync(authFile)) return res.sendFile(authFile);
+  res.redirect("/");
+});
+
 // Serverless-safe storage: handles read-only filesystems (e.g. Vercel) gracefully
 const LOCAL_USERS_FILE = path.join(__dirname, "users.json");
 const TMP_USERS_FILE = path.join(os.tmpdir(), "users.json");
@@ -1516,9 +1529,16 @@ async function callOpenOpenAIWithFallback(finalMessages, model, temperature, api
 
 app.get("/health", (_req, res) => res.json({ ok: true, model: config.defaultModel }));
 
-// 404 Catch-All for undefined routes
-app.use((_req, res) => {
-  res.status(404).json({ error: "Endpoint not found." });
+// Catch-All Route: API returns JSON 404, Web pages fallback to index.html
+app.use((req, res) => {
+  if (req.path.startsWith("/api/")) {
+    return res.status(404).json({ error: "API endpoint not found." });
+  }
+  const indexFile = path.join(__dirname, "index.html");
+  if (fs.existsSync(indexFile)) {
+    return res.sendFile(indexFile);
+  }
+  res.status(404).send("Page not found");
 });
 
 // Global Production Error Handler (Hides debug traces & internal stack)
