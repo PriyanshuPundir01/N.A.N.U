@@ -28,12 +28,152 @@ let config = {
   smtpPort: parseInt(process.env.SMTP_PORT || "465", 10)
 };
 
-app.use(cors());
-app.use(express.json({ limit: "25mb" }));
-app.use(express.urlencoded({ limit: "25mb", extended: true }));
+// Security & Hardening Configuration
+app.disable("x-powered-by");
+
+// 1. Security Headers (Helmet-equivalent hardening)
+app.use((_req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
+  res.setHeader("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
+  res.setHeader(
+    "Content-Security-Policy",
+    "default-src 'self'; " +
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdnjs.cloudflare.com; " +
+    "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; " +
+    "font-src 'self' https://fonts.gstatic.com; " +
+    "img-src 'self' data: blob: https:; " +
+    "connect-src 'self' https://generativelanguage.googleapis.com https://api.openai.com https://openrouter.ai; " +
+    "frame-ancestors 'none';"
+  );
+  next();
+});
+
+// 2. Strict CORS Configuration
+const defaultAllowedOrigins = [`http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`];
+const allowedOrigins = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(",").map(o => o.trim())
+  : defaultAllowedOrigins;
+
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    return callback(new Error("CORS policy violation: Access from this origin is restricted."));
+  },
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+}));
+
+// 3. Path Traversal & Sensitive File Exposure Shield
+const SENSITIVE_PATTERNS = [
+  /^\/\.env/i,
+  /^\/\.git/i,
+  /^\/\.vscode/i,
+  /^\/\.idea/i,
+  /\/users\.json$/i,
+  /\/package(-lock)?\.json$/i,
+  /\/index\.js$/i,
+  /\/README\.md$/i,
+  /\/node_modules/i
+];
+
+app.use((req, res, next) => {
+  try {
+    const decoded = decodeURIComponent(req.path);
+    const normalized = path.normalize(decoded).replace(/\\/g, "/");
+
+    if (normalized.includes("../") || normalized.includes("..\\") || decoded.includes("\0")) {
+      return res.status(400).json({ error: "Bad request: Path traversal sequence detected." });
+    }
+
+    for (const pattern of SENSITIVE_PATTERNS) {
+      if (pattern.test(normalized)) {
+        return res.status(403).json({ error: "Access Denied: Protected resource." });
+      }
+    }
+  } catch {
+    return res.status(400).json({ error: "Invalid request path." });
+  }
+  next();
+});
+
+// 4. In-Memory Adaptive Rate Limiter
+function createRateLimiter({ windowMs, maxRequests, message }) {
+  const requests = new Map();
+
+  setInterval(() => {
+    const now = Date.now();
+    for (const [key, record] of requests.entries()) {
+      if (now > record.resetTime) requests.delete(key);
+    }
+  }, 5 * 60 * 1000).unref();
+
+  return (req, res, next) => {
+    const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.socket.remoteAddress || "127.0.0.1";
+    const key = `${req.baseUrl || ""}${req.path}:${ip}`;
+    const now = Date.now();
+
+    let record = requests.get(key);
+    if (!record || now > record.resetTime) {
+      record = { count: 1, resetTime: now + windowMs };
+      requests.set(key, record);
+      return next();
+    }
+
+    record.count++;
+    if (record.count > maxRequests) {
+      const retryAfter = Math.ceil((record.resetTime - now) / 1000);
+      res.setHeader("Retry-After", retryAfter);
+      return res.status(429).json({
+        error: message || `Too many requests. Please try again in ${retryAfter} seconds.`
+      });
+    }
+
+    next();
+  };
+}
+
+const authRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000,
+  maxRequests: 15,
+  message: "Too many authentication attempts. Please wait 15 minutes before trying again."
+});
+
+const otpRateLimiter = createRateLimiter({
+  windowMs: 10 * 60 * 1000,
+  maxRequests: 4,
+  message: "Too many OTP requests. Please wait 10 minutes before requesting another code."
+});
+
+const chatRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 30,
+  message: "Chat request limit reached. Please wait a moment before sending another message."
+});
+
+const generalApiLimiter = createRateLimiter({
+  windowMs: 60 * 1000,
+  maxRequests: 120,
+  message: "API rate limit reached. Please slow down."
+});
+
+app.use("/api/", generalApiLimiter);
+
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ limit: "15mb", extended: true }));
 app.use(morgan("tiny"));
+
+// Serve static assets with strict denial of dotfiles and security headers
 app.use(express.static(__dirname, {
+  dotfiles: "deny",
+  index: "index.html",
   setHeaders: (res, filePath) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
     if (filePath.endsWith(".html") || filePath.endsWith(".js") || filePath.endsWith(".css")) {
       res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
       res.setHeader("Pragma", "no-cache");
@@ -53,41 +193,183 @@ function saveUsers(users) {
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
 }
 
+// 5. Strong Password Hashing via Scrypt & Secure Verification
+function hashPassword(password) {
+  const salt = crypto.randomBytes(16).toString("hex");
+  const derivedKey = crypto.scryptSync(password, salt, 64);
+  return `scrypt:${salt}:${derivedKey.toString("hex")}`;
+}
+
+function verifyPassword(password, storedHash) {
+  if (!storedHash || typeof storedHash !== "string") return false;
+  if (!storedHash.startsWith("scrypt:")) {
+    return password === storedHash; // legacy fallback for pending migration
+  }
+  const parts = storedHash.split(":");
+  if (parts.length !== 3) return false;
+  const [, salt, originalKeyHex] = parts;
+  try {
+    const originalKey = Buffer.from(originalKeyHex, "hex");
+    const derivedKey = crypto.scryptSync(password, salt, 64);
+    if (originalKey.length !== derivedKey.length) return false;
+    return crypto.timingSafeEqual(originalKey, derivedKey);
+  } catch {
+    return false;
+  }
+}
+
+// 6. User Database Auto-Migration & Role Initialization
+function migrateUsersDatabase() {
+  try {
+    const users = getUsers();
+    let modified = false;
+    const adminEmail = (process.env.ADMIN_EMAIL || "priyanshupundir36@gmail.com").toLowerCase();
+
+    for (const user of users) {
+      if (user.password && !user.password.startsWith("scrypt:")) {
+        user.password = hashPassword(user.password);
+        modified = true;
+      }
+      if (user.otpExpiry && Date.now() > user.otpExpiry) {
+        user.otp = null;
+        user.otpExpiry = null;
+        modified = true;
+      }
+      if (user.email && user.email.toLowerCase() === adminEmail) {
+        if (!user.isAdmin) {
+          user.isAdmin = true;
+          user.role = "admin";
+          modified = true;
+        }
+      } else if (user.isAdmin === undefined) {
+        user.isAdmin = false;
+        user.role = "user";
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      saveUsers(users);
+      console.log("[SECURITY] Migrated user credentials to secure scrypt hashes and initialized roles.");
+    }
+  } catch (err) {
+    console.error("[SECURITY] Database migration error:", err.message);
+  }
+}
+
+// Run migration immediately
+migrateUsersDatabase();
+
+// 7. Input Validation & Form Sanitization Helpers
+const EMAIL_REGEX = /^[a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)+$/;
+
+function sanitizeEmail(email) {
+  if (!email || typeof email !== "string") return "";
+  return email.trim().toLowerCase();
+}
+
+function validateEmail(email) {
+  return typeof email === "string" && EMAIL_REGEX.test(email) && email.length <= 254;
+}
+
+function validatePassword(password) {
+  return typeof password === "string" && password.length >= 8 && password.length <= 128;
+}
+
+function validateOtp(otp) {
+  if (!otp) return false;
+  return /^\d{6}$/.test(String(otp).trim());
+}
+
+// 8. Authentication & RBAC Middleware
 function verify(req, res, next) {
   const token = req.headers.authorization?.replace("Bearer ", "").trim();
+  if (!token) {
+    return res.status(401).json({ error: "Unauthorized. Please log in." });
+  }
+
+  // Restrict bypass token: must be configured, not the default placeholder, and at least 32 characters
+  if (CLIENT_TOKEN && CLIENT_TOKEN !== "change-this-client-token" && CLIENT_TOKEN.length >= 32 && token === CLIENT_TOKEN) {
+    const users = getUsers();
+    req.user = users.find(u => u.isAdmin) || users[0] || null;
+    return next();
+  }
+
   const users = getUsers();
-  const foundUser = token ? users.find(u => u.token === token) : null;
+  const foundUser = users.find(u => u.token === token);
   if (foundUser) {
     req.user = foundUser;
     return next();
   }
-  if (CLIENT_TOKEN && CLIENT_TOKEN !== "change-this-client-token" && token === CLIENT_TOKEN) {
-    req.user = users[0] || null;
-    return next();
-  }
   
-  return res.status(401).json({ error: "Unauthorized. Please log in." });
+  return res.status(401).json({ error: "Unauthorized. Invalid or expired session." });
 }
 
-app.post("/api/auth/register", (req, res) => {
-  const { email, password } = req.body;
-  if (!email || !password) return res.status(400).json({ error: "Email and password required" });
+function requireAdmin(req, res, next) {
+  if (!req.user || !req.user.isAdmin) {
+    return res.status(403).json({ error: "Access denied. Administrator privileges required." });
+  }
+  next();
+}
+
+app.post("/api/auth/register", authRateLimiter, (req, res) => {
+  const email = sanitizeEmail(req.body.email);
+  const password = typeof req.body.password === "string" ? req.body.password : "";
+
+  if (!validateEmail(email)) {
+    return res.status(400).json({ error: "Please enter a valid email address." });
+  }
+  if (!validatePassword(password)) {
+    return res.status(400).json({ error: "Password must be between 8 and 128 characters." });
+  }
+
   const users = getUsers();
-  if (users.find(u => u.email === email)) return res.status(400).json({ error: "User already exists" });
+  if (users.some(u => u.email.toLowerCase() === email)) {
+    return res.status(400).json({ error: "An account with this email address already exists." });
+  }
   
-  const token = crypto.randomBytes(16).toString("hex");
-  users.push({ email, password, token });
+  const token = crypto.randomBytes(32).toString("hex");
+  const hashedPassword = hashPassword(password);
+  const adminEmail = (process.env.ADMIN_EMAIL || "priyanshupundir36@gmail.com").toLowerCase();
+  const isAdmin = users.length === 0 || email === adminEmail;
+
+  users.push({
+    email,
+    password: hashedPassword,
+    token,
+    isAdmin,
+    role: isAdmin ? "admin" : "user",
+    createdAt: Date.now()
+  });
   saveUsers(users);
-  res.json({ success: true, token });
+
+  res.json({ success: true, token, isAdmin });
 });
 
-app.post("/api/auth/login", (req, res) => {
-  const { email, password } = req.body;
+app.post("/api/auth/login", authRateLimiter, (req, res) => {
+  const email = sanitizeEmail(req.body.email);
+  const password = typeof req.body.password === "string" ? req.body.password : "";
+
+  if (!email || !password) {
+    return res.status(400).json({ error: "Email and password are required." });
+  }
+
   const users = getUsers();
-  const user = users.find(u => u.email === email && u.password === password);
-  if (!user) return res.status(401).json({ error: "Invalid email or password" });
+  const user = users.find(u => u.email.toLowerCase() === email);
+  if (!user || !verifyPassword(password, user.password)) {
+    return res.status(401).json({ error: "Invalid email or password." });
+  }
   
-  res.json({ success: true, token: user.token });
+  if (!user.token) {
+    user.token = crypto.randomBytes(32).toString("hex");
+    saveUsers(users);
+  }
+
+  res.json({
+    success: true,
+    token: user.token,
+    isAdmin: Boolean(user.isAdmin)
+  });
 });
 
 async function sendEmailOtp(toEmail, otp) {
@@ -145,13 +427,22 @@ async function sendEmailOtp(toEmail, otp) {
   }
 }
 
-app.post("/api/auth/forgot-password", async (req, res) => {
-  const { email } = req.body || {};
-  if (!email) return res.status(400).json({ error: "Email address required" });
+app.post("/api/auth/forgot-password", otpRateLimiter, async (req, res) => {
+  const email = sanitizeEmail(req.body?.email);
+  if (!validateEmail(email)) {
+    return res.status(400).json({ error: "Please enter a valid email address." });
+  }
 
   const users = getUsers();
-  const user = users.find(u => u.email.toLowerCase() === email.trim().toLowerCase());
-  if (!user) return res.status(404).json({ error: "No account found with that email address" });
+  const user = users.find(u => u.email.toLowerCase() === email);
+  if (!user) {
+    // Avoid account enumeration: return consistent safe response
+    return res.json({
+      success: true,
+      sent: true,
+      message: "If an account exists with this email address, a verification code has been dispatched."
+    });
+  }
   
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   user.otp = otp;
@@ -160,12 +451,11 @@ app.post("/api/auth/forgot-password", async (req, res) => {
   
   const emailRes = await sendEmailOtp(user.email, otp);
   if (!emailRes.sent) {
-    return res.status(400).json({
+    return res.status(500).json({
       error: emailRes.error || "Email delivery failed. Please check your SMTP configuration."
     });
   }
 
-  // The OTP is strictly sent only to the user's email inbox — NEVER returned to the client
   return res.json({
     success: true,
     email: user.email,
@@ -174,18 +464,30 @@ app.post("/api/auth/forgot-password", async (req, res) => {
   });
 });
 
-app.post("/api/auth/reset-password", (req, res) => {
-  const { email, otp, newPassword } = req.body;
+app.post("/api/auth/reset-password", authRateLimiter, (req, res) => {
+  const email = sanitizeEmail(req.body?.email);
+  const otp = String(req.body?.otp || "").trim();
+  const newPassword = typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+
+  if (!validateEmail(email) || !validateOtp(otp)) {
+    return res.status(400).json({ error: "A valid email and 6-digit OTP code are required." });
+  }
+  if (!validatePassword(newPassword)) {
+    return res.status(400).json({ error: "New password must be between 8 and 128 characters." });
+  }
+
   const users = getUsers();
-  const user = users.find(u => u.email === email);
-  if (!user) return res.status(404).json({ error: "Account not found" });
-  if (user.otp !== otp || Date.now() > user.otpExpiry) {
-    return res.status(400).json({ error: "Invalid or expired OTP" });
+  const user = users.find(u => u.email.toLowerCase() === email);
+  if (!user) return res.status(404).json({ error: "Account not found." });
+
+  if (!user.otp || user.otp !== otp || !user.otpExpiry || Date.now() > user.otpExpiry) {
+    return res.status(400).json({ error: "Invalid or expired OTP code." });
   }
   
-  user.password = newPassword;
+  user.password = hashPassword(newPassword);
   user.otp = null;
-  user.token = crypto.randomBytes(16).toString("hex"); // Generate new token for security
+  user.otpExpiry = null;
+  user.token = crypto.randomBytes(32).toString("hex");
   saveUsers(users);
   
   res.json({ success: true, token: user.token });
@@ -193,26 +495,31 @@ app.post("/api/auth/reset-password", (req, res) => {
 
 app.get("/api/auth/me", verify, (req, res) => {
   const user = req.user;
-  if (!user) return res.status(404).json({ error: "User not found" });
-  res.json({ email: user.email });
+  if (!user) return res.status(404).json({ error: "User not found." });
+  res.json({
+    email: user.email,
+    isAdmin: Boolean(user.isAdmin),
+    role: user.role || (user.isAdmin ? "admin" : "user")
+  });
 });
 
-app.post("/api/auth/send-profile-otp", verify, async (req, res) => {
+app.post("/api/auth/send-profile-otp", verify, otpRateLimiter, async (req, res) => {
   const user = req.user;
-  if (!user) return res.status(404).json({ error: "User not found" });
-  const { email } = req.body || {};
+  if (!user) return res.status(404).json({ error: "User not found." });
+  const email = sanitizeEmail(req.body?.email);
 
-  if (!email || typeof email !== "string" || !email.includes("@")) {
+  if (!validateEmail(email)) {
     return res.status(400).json({ error: "Please enter a valid email address." });
   }
 
-  if (email.trim().toLowerCase() !== user.email.toLowerCase()) {
-    return res.status(400).json({ error: `The entered email (${email}) does not match your registered account email.` });
+  // Enforce access control: users can only send OTP to their own account
+  if (email !== user.email.toLowerCase()) {
+    return res.status(403).json({ error: "Access denied. You may only manage your own account email." });
   }
 
   const users = getUsers();
   const targetUser = users.find(u => u.email.toLowerCase() === user.email.toLowerCase());
-  if (!targetUser) return res.status(404).json({ error: "User not found" });
+  if (!targetUser) return res.status(404).json({ error: "User not found." });
 
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
   targetUser.otp = otp;
@@ -221,12 +528,11 @@ app.post("/api/auth/send-profile-otp", verify, async (req, res) => {
 
   const emailRes = await sendEmailOtp(targetUser.email, otp);
   if (!emailRes.sent) {
-    return res.status(400).json({
+    return res.status(500).json({
       error: emailRes.error || "Email delivery failed. Please check your SMTP configuration."
     });
   }
 
-  // Strictly deliver to email only — never return OTP in response
   return res.json({
     success: true,
     email: targetUser.email,
@@ -235,81 +541,91 @@ app.post("/api/auth/send-profile-otp", verify, async (req, res) => {
   });
 });
 
-app.post("/api/auth/verify-profile-otp", verify, (req, res) => {
+app.post("/api/auth/verify-profile-otp", verify, authRateLimiter, (req, res) => {
   const user = req.user;
-  if (!user) return res.status(404).json({ error: "User not found" });
+  if (!user) return res.status(404).json({ error: "User not found." });
 
-  const { email, otp } = req.body || {};
-  if (!otp || String(otp).trim().length !== 6) {
-    return res.status(400).json({ error: "Please enter the complete 6-digit OTP code." });
+  const otp = String(req.body?.otp || "").trim();
+  const email = sanitizeEmail(req.body?.email);
+
+  if (!validateOtp(otp)) {
+    return res.status(400).json({ error: "Please enter a valid 6-digit OTP code." });
   }
 
   const users = getUsers();
   const targetUser = users.find(u => u.email.toLowerCase() === user.email.toLowerCase());
-  if (!targetUser) return res.status(404).json({ error: "User not found" });
+  if (!targetUser) return res.status(404).json({ error: "User not found." });
 
-  if (email && email.trim().toLowerCase() !== targetUser.email.toLowerCase()) {
-    return res.status(400).json({ error: "Email does not match your registered account." });
+  if (email && email !== targetUser.email.toLowerCase()) {
+    return res.status(403).json({ error: "Email does not match your registered account." });
   }
 
-  if (!targetUser.otp || targetUser.otp !== String(otp).trim() || Date.now() > targetUser.otpExpiry) {
-    return res.status(400).json({ error: "Invalid or expired OTP code. Please click Resend OTP if needed." });
+  if (!targetUser.otp || targetUser.otp !== otp || !targetUser.otpExpiry || Date.now() > targetUser.otpExpiry) {
+    return res.status(400).json({ error: "Invalid or expired OTP code. Please request a new code." });
   }
 
   res.json({ success: true, message: "OTP confirmed successfully." });
 });
 
-app.post("/api/auth/update-profile", verify, (req, res) => {
+app.post("/api/auth/update-profile", verify, authRateLimiter, (req, res) => {
   const user = req.user;
-  if (!user) return res.status(404).json({ error: "User not found" });
+  if (!user) return res.status(404).json({ error: "User not found." });
 
-  const { email, otp, newPassword } = req.body;
-  if (!otp) return res.status(400).json({ error: "OTP verification code is required" });
-  if (!newPassword || newPassword.length < 6) {
-    return res.status(400).json({ error: "New password must be at least 6 characters" });
+  const otp = String(req.body?.otp || "").trim();
+  const newPassword = typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
+  const email = sanitizeEmail(req.body?.email);
+
+  if (!validateOtp(otp)) {
+    return res.status(400).json({ error: "A valid 6-digit OTP verification code is required." });
+  }
+  if (!validatePassword(newPassword)) {
+    return res.status(400).json({ error: "New password must be between 8 and 128 characters." });
   }
 
   const users = getUsers();
   const targetUser = users.find(u => u.email.toLowerCase() === user.email.toLowerCase());
-  if (!targetUser) return res.status(404).json({ error: "User not found" });
+  if (!targetUser) return res.status(404).json({ error: "User not found." });
 
-  if (email && email.trim().toLowerCase() !== targetUser.email.toLowerCase()) {
-    return res.status(400).json({ error: "Email does not match your registered account." });
+  if (email && email !== targetUser.email.toLowerCase()) {
+    return res.status(403).json({ error: "Email does not match your registered account." });
   }
 
-  if (!targetUser.otp || targetUser.otp !== String(otp).trim() || Date.now() > targetUser.otpExpiry) {
+  if (!targetUser.otp || targetUser.otp !== otp || !targetUser.otpExpiry || Date.now() > targetUser.otpExpiry) {
     return res.status(400).json({ error: "Invalid or expired OTP code. Please request a new code." });
   }
 
-  targetUser.password = newPassword;
+  targetUser.password = hashPassword(newPassword);
   targetUser.otp = null;
   targetUser.otpExpiry = null;
+  targetUser.token = crypto.randomBytes(32).toString("hex");
   saveUsers(users);
 
-  console.log(`\n\n[AUTH SYSTEM] ✅ Password successfully updated for ${targetUser.email}!\n\n`);
-  res.json({ success: true, message: "Password updated successfully" });
+  res.json({ success: true, message: "Password updated successfully." });
 });
 
-app.get("/api/config", verify, (_req, res) => {
+app.get("/api/config", verify, (req, res) => {
+  const isAdmin = Boolean(req.user?.isAdmin);
   res.json({
     hasOpenAI: Boolean(config.openaiKey && !config.openaiKey.startsWith("sk-...")),
     hasGemini: Boolean(config.geminiKey),
     hasOpenRouter: Boolean(config.openrouterKey),
     hasEmailSmtp: Boolean(config.emailUser && config.emailPass),
-    emailUser: config.emailUser || "",
-    defaultModel: config.defaultModel
+    emailUser: isAdmin ? (config.emailUser || "") : "", // Keep email hidden from non-admin users
+    defaultModel: config.defaultModel,
+    isAdmin
   });
 });
 
-app.post("/api/settings", verify, (req, res) => {
+// Protected Admin-Only Route
+app.post("/api/settings", verify, requireAdmin, (req, res) => {
   const { openaiKey, geminiKey, openrouterKey, defaultModel, openaiBaseUrl, emailUser, emailPass } = req.body || {};
-  if (openaiKey !== undefined) config.openaiKey = openaiKey.trim();
-  if (geminiKey !== undefined) config.geminiKey = geminiKey.trim();
-  if (openrouterKey !== undefined) config.openrouterKey = openrouterKey.trim();
-  if (defaultModel) config.defaultModel = defaultModel.trim();
-  if (openaiBaseUrl) config.openaiBaseUrl = openaiBaseUrl.trim();
-  if (emailUser !== undefined) config.emailUser = emailUser.trim();
-  if (emailPass !== undefined && emailPass.trim() !== "") config.emailPass = emailPass.trim().replace(/\s+/g, "");
+  if (openaiKey !== undefined) config.openaiKey = String(openaiKey).trim();
+  if (geminiKey !== undefined) config.geminiKey = String(geminiKey).trim();
+  if (openrouterKey !== undefined) config.openrouterKey = String(openrouterKey).trim();
+  if (defaultModel) config.defaultModel = String(defaultModel).trim();
+  if (openaiBaseUrl) config.openaiBaseUrl = String(openaiBaseUrl).trim();
+  if (emailUser !== undefined) config.emailUser = String(emailUser).trim();
+  if (emailPass !== undefined && String(emailPass).trim() !== "") config.emailPass = String(emailPass).trim().replace(/\s+/g, "");
 
   try {
     const envPath = path.join(__dirname, ".env");
@@ -321,7 +637,7 @@ app.post("/api/settings", verify, (req, res) => {
     content += `OPENROUTER_API_KEY=${config.openrouterKey}\n`;
     if (config.emailUser) content += `EMAIL_USER=${config.emailUser}\n`;
     if (config.emailPass) content += `EMAIL_PASS=${config.emailPass}\n`;
-    fs.writeFileSync(envPath, content, "utf8");
+    fs.writeFileSync(envPath, content, { encoding: "utf8", mode: 0o600 });
   } catch (err) {
     console.warn("Could not save to .env file:", err.message);
   }
@@ -872,16 +1188,17 @@ async function handleChatPasswordChange(cleanMessages, reqUser, res) {
       }
     }
 
-    if (!passCandidate || passCandidate.length < 6) {
-      const text = `## ✅ OTP Code Verified!\n\nYour 6-digit OTP **${submittedOtp}** has been successfully verified.\n\nNow, please reply with your **new password** (must be at least 6 characters) to save the update.`;
+    if (!passCandidate || passCandidate.length < 8) {
+      const text = `## ✅ OTP Code Verified!\n\nYour 6-digit OTP **${submittedOtp}** has been successfully verified.\n\nNow, please reply with your **new password** (must be at least 8 characters) to save the update.`;
       res.setHeader("Content-Type", "text/plain; charset=utf-8");
       res.end(text);
       return true;
     }
 
-    targetUser.password = passCandidate;
+    targetUser.password = hashPassword(passCandidate);
     targetUser.otp = null;
     targetUser.otpExpiry = null;
+    targetUser.token = crypto.randomBytes(32).toString("hex");
     saveUsers(users);
 
     console.log(`\n\n[AUTH SYSTEM] 🎉 Password successfully updated for ${targetUser.email} via AI Chat!\n\n`);
@@ -895,13 +1212,14 @@ async function handleChatPasswordChange(cleanMessages, reqUser, res) {
   // Step 4: User provides just the new password after OTP was verified
   if (isAwaitingNewPass && !otpMatch) {
     const candidate = lastUserMsg.trim().split(/\s+/)[0];
-    if (candidate.length >= 6 && reqUser) {
+    if (candidate.length >= 8 && reqUser) {
       const users = getUsers();
       const targetUser = users.find(u => u.token === reqUser.token);
       if (targetUser) {
-        targetUser.password = candidate;
+        targetUser.password = hashPassword(candidate);
         targetUser.otp = null;
         targetUser.otpExpiry = null;
+        targetUser.token = crypto.randomBytes(32).toString("hex");
         saveUsers(users);
         console.log(`\n\n[AUTH SYSTEM] 🎉 Password successfully updated for ${targetUser.email} via AI Chat!\n\n`);
         const text = `## 🎉 Password Successfully Updated!\n\nYour account password for **${targetUser.email}** has been updated successfully!\n\nYou can now use your new password for future logins.`;
@@ -940,7 +1258,7 @@ async function handleChatClearChats(cleanMessages, res) {
   return false;
 }
 
-app.post("/api/chat", verify, async (req, res) => {
+app.post("/api/chat", verify, chatRateLimiter, async (req, res) => {
   const {
     messages = [],
     temperature = 0.7,
@@ -1125,15 +1443,29 @@ async function callOpenOpenAIWithFallback(finalMessages, model, temperature, api
 
     if (err.status) {
       res.statusCode = err.status;
-      res.end(err.body || "OpenAI upstream error");
+      res.end("AI provider upstream error. Please try again shortly.");
     } else {
       res.statusCode = 500;
-      res.end(err.message || "Unknown error");
+      res.end("An internal error occurred while generating the response.");
     }
   }
 }
 
 app.get("/health", (_req, res) => res.json({ ok: true, model: config.defaultModel }));
+
+// 404 Catch-All for undefined routes
+app.use((_req, res) => {
+  res.status(404).json({ error: "Endpoint not found." });
+});
+
+// Global Production Error Handler (Hides debug traces & internal stack)
+app.use((err, _req, res, _next) => {
+  console.error("[SERVER ERROR]", err.message || err);
+  if (res.headersSent) return;
+  res.status(err.status || 500).json({
+    error: "A secure server error occurred. Please try again later."
+  });
+});
 
 app.listen(PORT, () => console.log(`Server running at http://localhost:${PORT}`));
 

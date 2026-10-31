@@ -137,14 +137,26 @@ try {
 }
 
 function renderMd(text) {
+  if (typeof text !== "string") return "";
+  let rawHtml = "";
   if (window.marked && typeof marked.parse === "function") {
     try {
-      return marked.parse(text);
+      rawHtml = marked.parse(text);
     } catch {
-      return escapeHtml(text);
+      rawHtml = escapeHtml(text);
     }
+  } else {
+    rawHtml = escapeHtml(text);
   }
-  return escapeHtml(text);
+
+  // Sanitize via DOMPurify to eliminate XSS vectors
+  if (window.DOMPurify && typeof DOMPurify.sanitize === "function") {
+    return DOMPurify.sanitize(rawHtml, {
+      ADD_ATTR: ["target"],
+      FORBID_TAGS: ["style", "script", "iframe", "object", "embed", "form", "input"]
+    });
+  }
+  return escapeHtml(rawHtml);
 }
 
 function applyHighlighting(container) {

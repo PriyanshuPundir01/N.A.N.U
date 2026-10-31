@@ -23,18 +23,30 @@ async function apiCall(endpoint, payload) {
   return data;
 }
 
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const btn = document.getElementById('login-btn');
   const err = document.getElementById('login-error');
   err.textContent = '';
+
+  const email = (document.getElementById('login-email').value || '').trim();
+  const password = document.getElementById('login-password').value || '';
+
+  if (!EMAIL_PATTERN.test(email)) {
+    err.textContent = 'Please enter a valid email address.';
+    return;
+  }
+  if (!password) {
+    err.textContent = 'Please enter your password.';
+    return;
+  }
+
   btn.textContent = 'Logging in...';
 
   try {
-    const data = await apiCall('/api/auth/login', {
-      email: document.getElementById('login-email').value,
-      password: document.getElementById('login-password').value
-    });
+    const data = await apiCall('/api/auth/login', { email, password });
     localStorage.setItem('nanu_token', data.token);
     window.location.href = '/';
   } catch (error) {
@@ -48,13 +60,23 @@ document.getElementById('registerForm').addEventListener('submit', async (e) => 
   const btn = document.getElementById('reg-btn');
   const err = document.getElementById('reg-error');
   err.textContent = '';
+
+  const email = (document.getElementById('reg-email').value || '').trim();
+  const password = document.getElementById('reg-password').value || '';
+
+  if (!EMAIL_PATTERN.test(email)) {
+    err.textContent = 'Please enter a valid email address.';
+    return;
+  }
+  if (password.length < 8) {
+    err.textContent = 'Password must be at least 8 characters long.';
+    return;
+  }
+
   btn.textContent = 'Signing up...';
 
   try {
-    const data = await apiCall('/api/auth/register', {
-      email: document.getElementById('reg-email').value,
-      password: document.getElementById('reg-password').value
-    });
+    const data = await apiCall('/api/auth/register', { email, password });
     localStorage.setItem('nanu_token', data.token);
     window.location.href = '/';
   } catch (error) {
@@ -99,13 +121,26 @@ document.getElementById('verifyForm').addEventListener('submit', async (e) => {
   const btn = document.getElementById('verify-btn');
   const err = document.getElementById('forgot-error');
   err.textContent = '';
+
+  const otp = (document.getElementById('verify-otp').value || '').trim();
+  const newPassword = document.getElementById('verify-new-password').value || '';
+
+  if (!/^\d{6}$/.test(otp)) {
+    err.textContent = 'Please enter the complete 6-digit verification code.';
+    return;
+  }
+  if (newPassword.length < 8) {
+    err.textContent = 'New password must be at least 8 characters long.';
+    return;
+  }
+
   btn.textContent = 'Verifying...';
 
   try {
     const data = await apiCall('/api/auth/reset-password', {
       email: resetEmail,
-      otp: document.getElementById('verify-otp').value,
-      newPassword: document.getElementById('verify-new-password').value
+      otp,
+      newPassword
     });
     localStorage.setItem('nanu_token', data.token);
     window.location.href = '/';
